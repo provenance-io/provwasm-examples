@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InitMsg",
+  "type": "object",
+  "required": [
+    "contract_name",
+    "denoms"
+  ],
+  "properties": {
+    "contract_name": {
+      "type": "string"
+    },
+    "denoms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
