@@ -4,12 +4,19 @@
   "type": "object",
   "required": [
     "admin",
+    "attrs",
     "denoms",
     "exchange"
   ],
   "properties": {
     "admin": {
       "$ref": "#/definitions/HumanAddr"
+    },
+    "attrs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "denoms": {
       "type": "array",

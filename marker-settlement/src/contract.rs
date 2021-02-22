@@ -22,7 +22,7 @@ pub fn init(
         return Err(generic_err("funds sent during init"));
     }
 
-    // Ensure at least one denomination was send
+    // Ensure at least one denomination was sent.
     if msg.denoms.is_empty() {
         return Err(generic_err("no denominations provided during init"));
     }

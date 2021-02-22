@@ -3,11 +3,18 @@
   "title": "InitMsg",
   "type": "object",
   "required": [
+    "attrs",
     "contract_name",
     "denoms",
     "exchange"
   ],
   "properties": {
+    "attrs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "contract_name": {
       "type": "string"
     },

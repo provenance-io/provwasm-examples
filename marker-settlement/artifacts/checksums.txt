@@ -1,1 +1,1 @@
-3bc98570a1a13f1303178c7a924fd5661e16e00ff284ef311618a4316958eb1e  marker_settlement.wasm
+c9011bfc93cfaa9c2a248375b09d7f7f3ae08522dc1dc4dbc57247cec6884e47  marker_settlement.wasm
