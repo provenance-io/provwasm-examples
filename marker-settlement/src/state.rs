@@ -11,6 +11,7 @@ pub struct State {
     pub admin: HumanAddr,    // The contract admin/owner
     pub exchange: HumanAddr, // The address of the exchange that sends settlements
     pub denoms: Vec<String>, // The allowed settlement denominations.
+    pub attrs: Vec<String>,  // Attributes required for transfer (empty means none required).
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {

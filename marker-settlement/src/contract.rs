@@ -1,5 +1,6 @@
 use cosmwasm_std::{
-    Deps, DepsMut, Env, HandleResponse, InitResponse, MessageInfo, QueryResponse, StdError,
+    Deps, DepsMut, Env, HandleResponse, HumanAddr, InitResponse, MessageInfo, QueryResponse,
+    StdError,
 };
 use provwasm_std::{
     bind_name, transfer_marker_coins, MarkerType, ProvenanceMsg, ProvenanceQuerier,
@@ -21,6 +22,11 @@ pub fn init(
         return Err(generic_err("funds sent during init"));
     }
 
+    // Ensure at least one denomination was send
+    if msg.denoms.is_empty() {
+        return Err(generic_err("no denominations provided during init"));
+    }
+
     // Ensure all sent denominations are backed by restricted markers.
     for denom in msg.denoms.iter() {
         ensure_restricted_marker(deps.as_ref(), denom)?;
@@ -32,6 +38,7 @@ pub fn init(
         admin: info.sender,
         exchange: msg.exchange,
         denoms: msg.denoms,
+        attrs: msg.attrs,
     };
     config(deps.storage).save(&state)?;
 
@@ -72,6 +79,8 @@ pub fn handle(
             }
             // Double check that the denom is backed by a restricted marker.
             ensure_restricted_marker(deps.as_ref(), &coin.denom)?;
+            // Ensure recpient has all required attributes before we transfer.
+            ensure_recipient_attributes(deps.as_ref(), to.clone(), state.attrs)?;
             // Dispatch transfer params to the marker module transfer handler.
             let msg = transfer_marker_coins(coin, to, from);
             Ok(HandleResponse {
@@ -98,6 +107,28 @@ fn requires_marker_transfer(deps: Deps, denom: &str) -> bool {
         Ok(marker) => matches!(marker.marker_type, MarkerType::Restricted),
         Err(_) => false,
     }
+}
+
+// Return an error if a transfer recipient doesn't have all the given attributes
+fn ensure_recipient_attributes(
+    deps: Deps,
+    to: HumanAddr,
+    attrs: Vec<String>,
+) -> Result<(), ContractError> {
+    // Skip the check if no attributes are required.
+    if attrs.is_empty() {
+        return Ok(());
+    }
+    // Check for all provided attributes
+    let querier = ProvenanceQuerier::new(&deps.querier);
+    for name in attrs.iter() {
+        let res = querier.get_attributes(to.clone(), Some(name.clone()))?;
+        if res.attributes.is_empty() {
+            let errm = format!("named attribute {} not found for {}", name.clone(), to);
+            return Err(generic_err(&errm));
+        }
+    }
+    Ok(())
 }
 
 // An error helper function
@@ -138,6 +169,7 @@ mod tests {
                 exchange: HumanAddr::from("exchange"),
                 contract_name: "restricted.settlement.sc.pb".into(),
                 denoms: vec!["tokens".into()],
+                attrs: vec![],
             },
         )
         .unwrap();
@@ -170,6 +202,7 @@ mod tests {
                 exchange: HumanAddr::from("exchange"),
                 contract_name: "restricted.settlement.sc.pb".into(),
                 denoms: vec!["tokens".into()],
+                attrs: vec![],
             },
         )
         .unwrap();
