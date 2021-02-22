@@ -8,7 +8,8 @@ pub static CONFIG_KEY: &[u8] = b"config";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
-    pub exchange: HumanAddr, // Only this exchange can execute settlements.
+    pub admin: HumanAddr,    // The contract admin/owner
+    pub exchange: HumanAddr, // The address of the exchange that sends settlements
     pub denoms: Vec<String>, // The allowed settlement denominations.
 }
 

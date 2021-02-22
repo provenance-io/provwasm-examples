@@ -5,8 +5,8 @@ authors = ["David Pederson <dpederson@figure.com>"]
 edition = "2018"
 
 exclude = [
-  "marker-settlement.wasm",
-  "hash.txt",
+  "marker_settlement.wasm",
+  "checksums.txt",
 ]
 
 [lib]

@@ -38,4 +38,4 @@ optimize:
 
 .PHONY: install
 install: optimize
-	@cp artifacts/tutorial.wasm $(PROVWASM_INSTALL_DIR)
+	@cp artifacts/marker-settlement.wasm $(PROVWASM_INSTALL_DIR)

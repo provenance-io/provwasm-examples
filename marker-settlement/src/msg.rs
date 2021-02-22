@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
+    pub exchange: HumanAddr,   // The exchange sending settlements
     pub contract_name: String, // Give the instance a name
-    pub denoms: Vec<String>,   // Restrict settlements to this security
+    pub denoms: Vec<String>,   // Restrict settlements to specific denominations.
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

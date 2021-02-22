@@ -1,28 +1,36 @@
 use cosmwasm_std::{
     Deps, DepsMut, Env, HandleResponse, InitResponse, MessageInfo, QueryResponse, StdError,
 };
-use provwasm_std::{bind_name, transfer_marker_coins, Marker, ProvenanceMsg, ProvenanceQuerier};
+use provwasm_std::{
+    bind_name, transfer_marker_coins, MarkerType, ProvenanceMsg, ProvenanceQuerier,
+};
 
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InitMsg, QueryMsg};
 use crate::state::{config, config_read, State};
 
-// Initialize the contract, saving the instantiator as the contract owner.
+// Initialize the contract configuration state and bind a name to the contract instance.
 pub fn init(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     msg: InitMsg,
 ) -> Result<InitResponse<ProvenanceMsg>, ContractError> {
-    // Funds should not be sent with the message for restricted markers.
+    // Funds should NOT be sent to restricted marker settlement instances.
     if !info.sent_funds.is_empty() {
-        let errm = "funds sent during init";
-        return Err(ContractError::Std(StdError::generic_err(errm)));
+        return Err(generic_err("funds sent during init"));
+    }
+
+    // Ensure all sent denominations are backed by restricted markers.
+    for denom in msg.denoms.iter() {
+        ensure_restricted_marker(deps.as_ref(), denom)?;
     }
 
     // Initialize and store configuration state.
+    // NOTE: The exchange can also be the admin by instantiating the instance itself.
     let state = State {
-        exchange: info.sender, // The exchange must send a Wasm message to init this instance.
+        admin: info.sender,
+        exchange: msg.exchange,
         denoms: msg.denoms,
     };
     config(deps.storage).save(&state)?;
@@ -35,34 +43,36 @@ pub fn init(
     })
 }
 
-// Transfer funds using the marker module.
+// Transfer funds backed by restricted markers using the marker module.
 pub fn handle(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
     msg: HandleMsg,
 ) -> Result<HandleResponse<ProvenanceMsg>, ContractError> {
-    // Funds should not be sent with the message for restricted markers.
+    // Funds should NOT be sent with the message.
     if !info.sent_funds.is_empty() {
-        let errm = "sending funds is not supported in restricted marker settlements";
-        return Err(ContractError::Std(StdError::generic_err(errm)));
+        return Err(generic_err("sending funds is not supported"));
     }
 
-    // Validate the message sender is the contact owner.
+    // Validate the message sender is the exchange or the contact admin.
     let state = config_read(deps.storage).load()?;
-    if info.sender != state.exchange {
+    if info.sender != state.exchange && info.sender != state.admin {
         return Err(ContractError::Unauthorized {});
     }
 
-    // Transfer funds using the marker module. NOTE: The contract must have transfer permission on
-    // the restricted marker.
+    // Transfer funds using the marker module.
+    // NOTE: This contract instance must have 'transfer' permission on the restricted marker.
     match msg {
         HandleMsg::Settlement { coin, to, from } => {
+            // Ensure we got a supported denom
             if !state.denoms.contains(&coin.denom) {
                 let errm = format!("unsupported denom: {}", coin.denom);
-                return Err(ContractError::Std(StdError::generic_err(errm)));
+                return Err(generic_err(&errm));
             }
-            check_restricted_marker(deps.as_ref(), coin.denom.clone())?;
+            // Double check that the denom is backed by a restricted marker.
+            ensure_restricted_marker(deps.as_ref(), &coin.denom)?;
+            // Dispatch transfer params to the marker module transfer handler.
             let msg = transfer_marker_coins(coin, to, from);
             Ok(HandleResponse {
                 messages: vec![msg],
@@ -73,16 +83,26 @@ pub fn handle(
     }
 }
 
-// Return an error if the given denom doesn't represent a restricted marker.
-fn check_restricted_marker(deps: Deps, denom: String) -> Result<(), ContractError> {
-    let querier = ProvenanceQuerier::new(&deps.querier);
-    let marker: Marker = querier.get_marker_by_denom(denom)?;
-    if marker.bank_sends_disabled() {
-        return Ok(());
+// Return an error if the given denom is NOT backed by a restricted marker.
+fn ensure_restricted_marker(deps: Deps, denom: &str) -> Result<(), ContractError> {
+    if !requires_marker_transfer(deps, denom) {
+        return Err(generic_err("restricted markers are required"));
     }
-    Err(ContractError::Std(StdError::generic_err(
-        "marker must be restricted for this settlement contract",
-    )))
+    Ok(())
+}
+
+// Returns true iff a denom is backed by a restricted marker
+fn requires_marker_transfer(deps: Deps, denom: &str) -> bool {
+    let querier = ProvenanceQuerier::new(&deps.querier);
+    match querier.get_marker_by_denom(denom.into()) {
+        Ok(marker) => matches!(marker.marker_type, MarkerType::Restricted),
+        Err(_) => false,
+    }
+}
+
+// An error helper function
+fn generic_err(errm: &str) -> ContractError {
+    ContractError::Std(StdError::generic_err(errm))
 }
 
 /// Query does nothing
@@ -100,8 +120,14 @@ mod tests {
 
     #[test]
     fn valid_init() {
-        // Create default provenance mocks.
+        // Read the test marker from file
+        let bin = must_read_binary_file("testdata/marker.json");
+        let marker: Marker = from_binary(&bin).unwrap();
+        assert_eq!(marker.marker_type, MarkerType::Restricted);
+
+        // Create provenance mocks.
         let mut deps = mock_dependencies(&[]);
+        deps.querier.with_markers(vec![marker.clone()]);
 
         // Call init
         let res = init(
@@ -109,7 +135,8 @@ mod tests {
             mock_env(),
             mock_info("exchange", &[]),
             InitMsg {
-                contract_name: "marker.settlement.pb".into(),
+                exchange: HumanAddr::from("exchange"),
+                contract_name: "restricted.settlement.sc.pb".into(),
                 denoms: vec!["tokens".into()],
             },
         )
@@ -120,18 +147,19 @@ mod tests {
     }
 
     #[test]
-    fn valid_settlement() {
-        // Create a test settlement amount
-        let settlement_amount = coin(12345, "tokens");
-
+    fn valid_restricted_marker_settlement() {
         // Read the test marker from file
         let bin = must_read_binary_file("testdata/marker.json");
         let marker: Marker = from_binary(&bin).unwrap();
+        assert_eq!(marker.marker_type, MarkerType::Restricted);
 
         // Create provenance mocks with the marker and settlement amount.
         let mut deps = mock_dependencies(&[]);
         deps.querier.with_markers(vec![marker.clone()]);
         let info = mock_info("exchange", &[]);
+
+        // Create a test settlement amount
+        let settlement_amount = coin(12345, "tokens");
 
         // Call init so we have state
         init(
@@ -139,19 +167,25 @@ mod tests {
             mock_env(),
             mock_info("exchange", &[]),
             InitMsg {
-                contract_name: "marker.settlement.pb".into(),
+                exchange: HumanAddr::from("exchange"),
+                contract_name: "restricted.settlement.sc.pb".into(),
                 denoms: vec!["tokens".into()],
             },
         )
         .unwrap();
 
         // Handle a settlement to send funds to a bidder.
-        let msg = HandleMsg::Settlement {
-            coin: settlement_amount.clone(),
-            to: HumanAddr::from("ask"),
-            from: HumanAddr::from("bid"),
-        };
-        let res = handle(deps.as_mut(), mock_env(), info, msg).unwrap();
+        let res = handle(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            HandleMsg::Settlement {
+                coin: settlement_amount.clone(),
+                to: HumanAddr::from("ask"),
+                from: HumanAddr::from("bid"),
+            },
+        )
+        .unwrap();
 
         // Check we got a single set of marker transfer params
         assert_eq!(res.messages.len(), 1);

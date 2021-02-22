@@ -4,7 +4,8 @@
   "type": "object",
   "required": [
     "contract_name",
-    "denoms"
+    "denoms",
+    "exchange"
   ],
   "properties": {
     "contract_name": {
@@ -15,6 +16,14 @@
       "items": {
         "type": "string"
       }
+    },
+    "exchange": {
+      "$ref": "#/definitions/HumanAddr"
+    }
+  },
+  "definitions": {
+    "HumanAddr": {
+      "type": "string"
     }
   }
 }
