@@ -1,0 +1,39 @@
+[package]
+name = "exchange-settlement"
+version = "0.1.0"
+authors = ["David Pederson <dpederson@figure.com>"]
+edition = "2018"
+
+exclude = [
+  "exchange-settlement.wasm",
+  "checksums.txt",
+]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 1
+panic = 'abort'
+incremental = false
+overflow-checks = true
+
+[features]
+backtraces = ["cosmwasm-std/backtraces"]
+
+[dependencies]
+provwasm-std = { version = "0.13.3" }
+cosmwasm-std = { version = "0.13.2" }
+cosmwasm-storage = { version = "0.13.2" }
+schemars = "0.7"
+serde = { version = "1.0.103", default-features = false, features = ["derive"] }
+thiserror = { version = "1.0.23" }
+
+[dev-dependencies]
+provwasm-mocks = { version = "0.13.3" }
+cosmwasm-schema = { version = "0.13.2" }
