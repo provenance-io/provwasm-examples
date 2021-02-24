@@ -1,1 +1,0 @@
-5ba11dd16a258ee2b8a28db1fc885ee999628221785d66e6c9b8f5a6c5e1b357  bank_settlement.wasm
