@@ -34,7 +34,7 @@ pub fn init(
     })
 }
 
-/// Transfer funds using settlement actors.
+/// Transfer settlement funds.
 pub fn handle(
     deps: DepsMut,
     env: Env,
@@ -89,12 +89,11 @@ fn transfer_or_send(
     if requires_marker_transfer(deps, &amount.denom) {
         transfer_marker_coins(amount.clone(), to.clone(), from.clone())
     } else {
-        BankMsg::Send {
+        CosmosMsg::Bank(BankMsg::Send {
             to_address: to.clone(),
             from_address: env.contract.address.clone(), // Bank transfers require escrowed funds
             amount: vec![amount.clone()],
-        }
-        .into()
+        })
     }
 }
 
