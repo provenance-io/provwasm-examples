@@ -111,13 +111,12 @@ provenanced tx bank send \
 
 Markers must be created in order to have a supply of demo coins required for buys and sells.
 
-Create the restricted `stock` marker (no direct account-to-account sends for stock). There is no
-limit on the amount of coins that can be minted for this marker. This makes the supply "infinite"
-for demo purposes. A typical stock would have a fixed supply.
+Create the `stock` marker. There is no limit on the amount of coins that can be minted for this
+marker. This makes the supply essentially "infinite" for demo purposes.
 
 ```bash
 provenanced tx marker new 1000000000000demosecurity \
-    --type RESTRICTED \
+    --type COIN \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \
@@ -154,7 +153,7 @@ Grants on the `stock` marker.
 provenanced tx marker grant \
     $(provenanced keys show -a node0 --home build/node0 --keyring-backend test --testnet) \
     demosecurity \
-    admin,burn,mint \
+    admin,burn,deposit,delete,mint,transfer,withdraw \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \
@@ -172,7 +171,7 @@ Grants on the `stablecoin` marker.
 provenanced tx marker grant \
     $(provenanced keys show -a node0 --home build/node0 --keyring-backend test --testnet) \
     demostablecoin \
-    admin,burn,mint,withdraw \
+    admin,burn,deposit,delete,mint,transfer,withdraw \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \
@@ -370,7 +369,7 @@ Onboard the trader account with the contract (NOTE: trader address value may be 
 ```bash
 provenanced tx wasm execute \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"add_trader":{"address":"tp1crteypzf3l90edkffycw24s0nnqzluexp80j7w"}}' \
+    '{"add_trader":{"address":"tp19q6ula490s767cjt0xzn3k7rhnghfyc9t8hd7p"}}' \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \
@@ -388,7 +387,7 @@ Query the inital trader state, showing stock balance, stablecoin balance, debt, 
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp1crteypzf3l90edkffycw24s0nnqzluexp80j7w"}}' \
+    '{"get_trader_state":{"address":"tp19q6ula490s767cjt0xzn3k7rhnghfyc9t8hd7p"}}' \
     --testnet -o json | jq
  ```
 
@@ -419,7 +418,7 @@ Query trader state.
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp1crteypzf3l90edkffycw24s0nnqzluexp80j7w"}}' \
+    '{"get_trader_state":{"address":"tp19q6ula490s767cjt0xzn3k7rhnghfyc9t8hd7p"}}' \
     --testnet -o json | jq
  ```
 
@@ -448,7 +447,7 @@ Query trader state.
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp1crteypzf3l90edkffycw24s0nnqzluexp80j7w"}}' \
+    '{"get_trader_state":{"address":"tp19q6ula490s767cjt0xzn3k7rhnghfyc9t8hd7p"}}' \
     --testnet -o json | jq
  ```
 
@@ -460,6 +459,7 @@ To execute a sell, paying off debt. Result is trader has some `stablecoin` and s
 provenanced tx wasm execute \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
     '{"sell_stock":{"amount":"750"}}' \
+    --amount 750demosecurity \
     --from trader \
     --keyring-backend test \
     --home build/node0 \
@@ -476,6 +476,6 @@ Query trader state.
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp1crteypzf3l90edkffycw24s0nnqzluexp80j7w"}}' \
+    '{"get_trader_state":{"address":"tp19q6ula490s767cjt0xzn3k7rhnghfyc9t8hd7p"}}' \
     --testnet -o json | jq
  ```
