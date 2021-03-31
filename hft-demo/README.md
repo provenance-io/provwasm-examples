@@ -290,7 +290,104 @@ Example account query output
 
 ## Deployment
 
-TODO
+First, copy the WASM to the Provenance Blockchain project. Then, store the demo smart contract WASM
+in provenance.
+
+```bash
+provenanced tx wasm store hft.wasm \
+    --source "https://github.com/provenance-io/provwasm-examples/tree/main/hft-demo" \
+    --builder "cosmwasm/rust-optimizer:0.10.7" \
+    --instantiate-only-address $(provenanced keys show -a node0 --keyring-backend test --home build/node0 --testnet) \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 25000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet | jq
+```
+
+Instantiate the contract, binding it to the demo markers.
+
+```bash
+provenanced tx wasm instantiate 1 '{"security":"demosecurity","stablecoin":"demostablecoin"}' \
+    --admin $(provenanced keys show -a node0 --keyring-backend test --home build/node0 --testnet) \
+    --label hft_demo_v1 \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 3500nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet | jq
+```
+
+Add grants to the smart contract for the `stock` marker.
+
+```bash
+provenanced tx marker grant \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    demosecurity \
+    admin,burn,deposit,delete,mint,transfer,withdraw \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet
+```
+
+Add grants to the smart contract for the `stablecoin` marker.
+
+```bash
+provenanced tx marker grant \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    demostablecoin \
+    admin,burn,deposit,delete,mint,transfer,withdraw \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet
+```
+
+Onboard the trader account with the contract (NOTE: trader address value may be different).
+
+```bash
+provenanced tx wasm execute \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"add_trader":{"address":"tp1rr9p0m60xy6uvpprq6nlpp6tfp0a8t9adrr0av"}}' \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 3500nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet | jq
+```
+
+Query the inital trader state, showing stock balance, stablecoin balance, and debt.
+(NOTE: trader address value may be different)
+
+```bash
+provenanced q wasm contract-state smart \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"get_trader_state":{"address":"tp1rr9p0m60xy6uvpprq6nlpp6tfp0a8t9adrr0av"}}' \
+    --testnet -o json | jq
+ ```
 
 ## Execution
 

@@ -38,4 +38,4 @@ optimize:
 
 .PHONY: install
 install: optimize
-	@cp artifacts/hft-demo.wasm $(PROVWASM_INSTALL_DIR)
+	@cp artifacts/hft.wasm $(PROVWASM_INSTALL_DIR)
