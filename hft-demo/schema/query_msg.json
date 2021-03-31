@@ -20,17 +20,6 @@
           }
         }
       }
-    },
-    {
-      "type": "object",
-      "required": [
-        "get_denoms"
-      ],
-      "properties": {
-        "get_denoms": {
-          "type": "object"
-        }
-      }
     }
   ],
   "definitions": {

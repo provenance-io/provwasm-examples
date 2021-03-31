@@ -1,27 +1,6 @@
-# HFT Demo
+# HFT Demo Smart Contract
 
-## HFT
-
-- Shares Infinite @ $1
-- Buyer has $100
-- Lender 70% LTV on the shares
-
-```text
-- Roll for Buy Sell
-
-Buy
-- Roll for number of shares (1-100)
-- Buy 10 shares
-
-Account
------------------------
-        ($100 - 0 - $0)
-Buy 10  ($90 - 10 - $0)
-Buy 95  ($0 - 105 - $5)
-Sell 20 ($15 - 85 - $0)
-```
-
-### Mike Summary
+## Summary
 
 I want to build a proof of concept for high frequency trading on Provenance.
 
@@ -83,3 +62,236 @@ Provenance exchange can scale.
 
 Let me know if this makes sense. It would be very powerful to have the ability to run this demo,
 and demonstrate to entities like DTCC, brokers and Shareworks.
+
+## Blockchain Setup
+
+### Start
+
+Clear all current state, install the `provenanced` command, then start a 4-node localnet.
+
+```bash
+make clean
+make install
+make localnet-start
+```
+
+### Accounts
+
+An account needs to be set up for the trader.
+
+First, create `trader` account keys
+
+```bash
+provenanced keys add trader --home build/node0 --keyring-backend test --testnet
+```
+
+Then, fund the `trader` account with `nhash` to pay blockchain fees. We will give the trader
+stablecoin funds in a later step.
+
+```bash
+provenanced tx bank send \
+    $(provenanced keys show -a node0 --home build/node0 --keyring-backend test --testnet) \
+    $(provenanced keys show -a trader --home build/node0 --keyring-backend test --testnet) \
+    100000000nhash \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 2000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet
+```
+
+### Markers
+
+Markers must be created in order to have a supply of demo coins required for buys and sells.
+
+Create the restricted `stock` marker (no direct account-to-account sends for stock). There is no
+limit on the amount of coins that can be minted for this marker. This makes the supply "infinite"
+for demo purposes. A typical stock would have a fixed supply.
+
+```bash
+provenanced tx marker new 1000000000000demosecurity \
+    --type RESTRICTED \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet
+```
+
+Create the `stablecoin` marker for the demo.
+
+```bash
+provenanced tx marker new 1000000demostablecoin \
+    --type COIN \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet
+```
+
+Grant access on the markers to the `node0` account. We need this to give the smart contract the
+correct permissions later.
+
+Grants on the `stock` marker.
+
+```bash
+provenanced tx marker grant \
+    $(provenanced keys show -a node0 --home build/node0 --keyring-backend test --testnet) \
+    demosecurity \
+    admin,burn,mint \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet
+```
+
+Grants on the `stablecoin` marker.
+
+```bash
+provenanced tx marker grant \
+    $(provenanced keys show -a node0 --home build/node0 --keyring-backend test --testnet) \
+    demostablecoin \
+    admin,burn,mint,withdraw \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet
+```
+
+Finalize the `stock` marker
+
+```bash
+provenanced tx marker finalize demosecurity \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet
+```
+
+Finalize the `stablecoin` marker
+
+```bash
+provenanced tx marker finalize demostablecoin \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet
+```
+
+Activate the `stock` marker, minting and escrowing the supply
+
+```bash
+provenanced tx marker activate demosecurity \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet
+```
+
+Activate the `stablecoin` marker, minting and escrowing the supply
+
+```bash
+provenanced tx marker activate demostablecoin \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet
+```
+
+Now, fund the trader account from the `stablecoin` marker.
+
+```bash
+provenanced tx marker withdraw demostablecoin \
+    100demostablecoin \
+    $(provenanced keys show -a trader --home build/node0 --keyring-backend test --testnet) \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet
+```
+
+The `trader` account should now have `nhash` to pay network fees, and `stablecoin` for purchasing
+stocks.
+
+```bash
+provenanced q bank balances \
+    $(provenanced keys show -a trader --home build/node0 --keyring-backend test --testnet) \
+    --testnet -o json | jq
+```
+
+Example account query output
+
+```json
+{
+  "balances": [
+    {
+      "denom": "demostablecoin",
+      "amount": "100"
+    },
+    {
+      "denom": "nhash",
+      "amount": "100000000"
+    }
+  ],
+  "pagination": {
+    "next_key": null,
+    "total": "0"
+  }
+}
+```
+
+## Deployment
+
+TODO
+
+## Execution
+
+TODO

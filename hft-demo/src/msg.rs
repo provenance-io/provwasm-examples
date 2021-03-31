@@ -21,12 +21,12 @@ pub enum ExecuteMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     GetTraderState { address: HumanAddr },
-    GetDenoms {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub struct Denoms {
-    pub security: String,
-    pub stablecoin: String,
+pub struct TraderStateResponse {
+    pub security: Uint128,
+    pub stablecoin: Uint128,
+    pub loans: Uint128,
 }

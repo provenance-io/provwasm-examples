@@ -6,49 +6,25 @@ use cosmwasm_std::{
 use provwasm_std::{transfer_marker_coins, withdraw_coins, ProvenanceMsg, ProvenanceQuerier};
 
 use crate::error::ContractError;
-use crate::msg::{Denoms, ExecuteMsg, InitMsg, QueryMsg};
+use crate::msg::{ExecuteMsg, InitMsg, QueryMsg, TraderStateResponse};
 use crate::state::{config, config_read, trader_bucket, trader_bucket_read, State, TraderState};
 
-/// Initialize the smart contract config state and bind a name to the contract address.
+/// Initialize the smart contract config state.
 pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
     msg: InitMsg,
 ) -> Result<Response<ProvenanceMsg>, ContractError> {
-    // Ensure both requried markers exist
-    ensure_markers(deps.as_ref(), &msg.security, &msg.stablecoin)?;
-
-    // Create contract config state.
-    let state = State {
+    config(deps.storage).save(&State {
         contract_admin: info.sender,
         security: msg.security,
         stablecoin: msg.stablecoin,
-    };
-
-    // Save contract config state.
-    config(deps.storage).save(&state)?;
-
-    // Return default response
+    })?;
     Ok(Response::default())
 }
 
-// Return an error if the given denoms are NOT backed by markers.
-fn ensure_markers(deps: Deps, security: &str, stablecoin: &str) -> Result<(), ContractError> {
-    let querier = ProvenanceQuerier::new(&deps.querier);
-    querier.get_marker_by_denom(security)?;
-    querier.get_marker_by_denom(stablecoin)?;
-    Ok(())
-}
-
-// Return an error if the given denoms are NOT backed by markers.
-fn get_marker_address(deps: Deps, denom: &str) -> Result<HumanAddr, ContractError> {
-    let querier = ProvenanceQuerier::new(&deps.querier);
-    let marker = querier.get_marker_by_denom(denom)?;
-    Ok(marker.address)
-}
-
-/// Handle messages that will add traders and allow traders to buy/sell a security.
+/// Handle messages that will add traders and allow them to buy/sell a security.
 pub fn execute(
     deps: DepsMut,
     env: Env,
@@ -111,10 +87,10 @@ fn try_buy_stock(
         return Err(ContractError::InvalidBuy {});
     }
 
-    // Error if trader has reached or exceeded the loan cap
+    // Error if trader sent zero funds and has reached or exceeded the loan cap
     let trader_key = deps.api.canonical_address(&info.sender)?;
     let trader_state = trader_bucket_read(deps.storage).load(&trader_key)?;
-    if trader_state.loans >= trader_state.loan_cap {
+    if info.funds.is_empty() && trader_state.loans >= trader_state.loan_cap {
         return Err(ContractError::LoanCapExceeded {});
     }
 
@@ -128,35 +104,33 @@ fn try_buy_stock(
         return Err(ContractError::InvalidFundsDenom {});
     }
 
+    // Determine cost of purchase
+    let price: Coin = stock_price(deps.as_ref(), amount.u128(), security, stablecoin);
+
     // Create response type we can update on the fly
     let mut res = Response::new();
 
-    // If the purchase if covered by the funds sent, just withdraw the stocks from the restricted
-    // marker to the sender's account. The stablecoin remains escrowed in the contract for now.
-    let price: Coin = stock_price(deps.as_ref(), amount.u128(), security, stablecoin);
-    if has_coins(info.funds.as_slice(), &price) {
-        // TODO: What to do if trader sent more than required - error?
-        let stock_msg = withdraw_coins(security, amount.u128(), security, &info.sender)?;
-        res.add_message(stock_msg);
-
-    // Trader needs a loan
-    } else {
-        // Determine amount to loan and ensure trader is under loan cap
+    // Trader didn't sent enough to cover the purchase. Determine loan amount and ensure loan cap
+    // isn't exceeded.
+    if !has_coins(info.funds.as_slice(), &price) {
+        // Determine amount to loan
         let sent_amount = if info.funds.len() == 1 {
             info.funds[0].amount
         } else {
             Uint128::zero()
         };
-        let requested_loan = (price.amount - sent_amount)?;
-        let max_loanable = (trader_state.loan_cap - trader_state.loans)?;
-        if requested_loan > max_loanable {
+        let loan_amount = (price.amount - sent_amount)?;
+
+        // Ensure trader is under loan cap after borrowing.
+        let max_loan_amount = (trader_state.loan_cap - trader_state.loans)?;
+        if loan_amount > max_loan_amount {
             return Err(ContractError::LoanCapExceeded {});
         }
 
         // Escrow loan amount from the stablecoin loan pool marker into the contract
         let loan_msg = withdraw_coins(
             stablecoin,
-            requested_loan.u128(),
+            loan_amount.u128(),
             stablecoin,
             &env.contract.address,
         )?;
@@ -166,17 +140,17 @@ fn try_buy_stock(
         trader_bucket(deps.storage).update(&trader_key, |opt| -> Result<_, ContractError> {
             match opt {
                 Some(mut ts) => {
-                    ts.loans += requested_loan;
+                    ts.loans += loan_amount;
                     Ok(ts)
                 }
                 None => Err(ContractError::UnknownTrader {}),
             }
         })?;
-
-        // Withdraw shares to trader's account.
-        let stock_msg = withdraw_coins(security, amount.u128(), security, &info.sender)?;
-        res.add_message(stock_msg);
     }
+
+    // TODO: What to do if trader sent more than required - error?
+    let stock_msg = withdraw_coins(security, amount.u128(), security, &info.sender)?;
+    res.add_message(stock_msg);
 
     Ok(res)
 }
@@ -224,9 +198,11 @@ fn try_sell_stock(
     // escrowed funds to the sender.
     let proceeds = stock_price(deps.as_ref(), amount.u128(), security, stablecoin);
     if trader_state.loans.is_zero() {
+        // Tansfer security back to pool
         let transfer_msg =
             transfer_marker_coins(amount.u128(), security, &security_pool, &info.sender)?;
         res.add_message(transfer_msg);
+        // Send stablecoin to trader
         let bank_msg: CosmosMsg<ProvenanceMsg> = CosmosMsg::Bank(BankMsg::Send {
             amount: vec![proceeds],
             to_address: info.sender,
@@ -289,29 +265,42 @@ fn try_sell_stock(
     Ok(res)
 }
 
+// Return an error if the given denoms are NOT backed by markers.
+fn get_marker_address(deps: Deps, denom: &str) -> Result<HumanAddr, ContractError> {
+    let querier = ProvenanceQuerier::new(&deps.querier);
+    let marker = querier.get_marker_by_denom(denom)?;
+    Ok(marker.address)
+}
+
 /// Handle query requests for trader loans
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<QueryResponse, StdError> {
     match msg {
         QueryMsg::GetTraderState { address } => try_get_trader_state(deps, address),
-        QueryMsg::GetDenoms {} => try_get_denoms(deps),
     }
 }
 
 // Query for trader loan cap and debt.
 fn try_get_trader_state(deps: Deps, address: HumanAddr) -> Result<QueryResponse, StdError> {
-    // TODO: Should we return stocks and cash balance here too?
+    // Load trader state
     let trader_key = deps.api.canonical_address(&address)?;
     let trader_state = trader_bucket_read(deps.storage).load(&trader_key)?;
-    let bin = to_binary(&trader_state)?;
-    Ok(bin)
-}
-
-// Query for trader loan cap and debt.
-fn try_get_denoms(deps: Deps) -> Result<QueryResponse, StdError> {
+    // Load config state
     let state = config_read(deps.storage).load()?;
-    let bin = to_binary(&Denoms {
-        security: state.security,
-        stablecoin: state.stablecoin,
+    // Get the amount of stock for the trader.
+    let security = match deps.querier.query_balance(&address, &state.security) {
+        Ok(balance) => balance.amount,
+        Err(_) => Uint128::zero(),
+    };
+    // Get the amount of stablecoin for the trader.
+    let stablecoin = match deps.querier.query_balance(&address, &state.stablecoin) {
+        Ok(balance) => balance.amount,
+        Err(_) => Uint128::zero(),
+    };
+    // Serialize and return response
+    let bin = to_binary(&TraderStateResponse {
+        security,
+        stablecoin,
+        loans: trader_state.loans,
     })?;
     Ok(bin)
 }
