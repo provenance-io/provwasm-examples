@@ -3,7 +3,10 @@ use cosmwasm_std::{
     MessageInfo, QueryResponse, Response, StdError, Uint128,
 };
 
-use provwasm_std::{transfer_marker_coins, withdraw_coins, ProvenanceMsg, ProvenanceQuerier};
+use provwasm_std::{
+    grant_marker_access, transfer_marker_coins, withdraw_coins, MarkerAccess, ProvenanceMsg,
+    ProvenanceQuerier,
+};
 
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InitMsg, QueryMsg, TraderStateResponse};
@@ -71,8 +74,14 @@ fn try_add_trader(
         )?;
     }
 
-    // Return a default response
-    Ok(Response::default())
+    // Hmmm, in order for trader to sell shares, they need transfer permission on the restricted
+    // security marker.
+    let grant_msg = grant_marker_access(&state.security, &address, vec![MarkerAccess::Transfer])?;
+
+    // Add grant to response.
+    let mut res = Response::new();
+    res.add_message(grant_msg);
+    Ok(res)
 }
 
 // Allow a trader to buy stock, with borrowing up to a pre-configured loan cap.
@@ -175,7 +184,8 @@ fn try_sell_stock(
     }
 
     // Load trader state
-    let trader_key = deps.api.canonical_address(&info.sender)?;
+    let sender = &info.sender;
+    let trader_key = deps.api.canonical_address(sender)?;
     let trader_state = trader_bucket_read(deps.storage).load(&trader_key)?;
 
     // Load security and stablecoin marker denoms.
@@ -198,14 +208,10 @@ fn try_sell_stock(
     // escrowed funds to the sender.
     let proceeds = stock_price(deps.as_ref(), amount.u128(), security, stablecoin);
     if trader_state.loans.is_zero() {
-        // Tansfer security back to pool
-        let transfer_msg =
-            transfer_marker_coins(amount.u128(), security, &security_pool, &info.sender)?;
-        res.add_message(transfer_msg);
         // Send stablecoin to trader
         let bank_msg: CosmosMsg<ProvenanceMsg> = CosmosMsg::Bank(BankMsg::Send {
             amount: vec![proceeds],
-            to_address: info.sender,
+            to_address: info.sender.clone(),
         });
         res.add_message(bank_msg);
 
@@ -224,7 +230,7 @@ fn try_sell_stock(
         let net_amount = coin(net.u128(), stablecoin);
         let net_msg: CosmosMsg<ProvenanceMsg> = CosmosMsg::Bank(BankMsg::Send {
             amount: vec![net_amount],
-            to_address: info.sender,
+            to_address: info.sender.clone(),
         });
         res.add_message(net_msg);
 
@@ -261,6 +267,19 @@ fn try_sell_stock(
             }
         })?;
     }
+
+    // XXX: Bug here - this won't work because x/wasm needs ALL signers to be the contract.
+    // Right now, signers are set as contract and sender in the marker module, causing the
+    // following error:
+    //
+    //    failed to execute message; message index: 0: dispatch: contract doesn't have permission:
+    //    unauthorized: invalid request
+
+    // Tansfer security back to stock pool
+    let transfer_msg = transfer_marker_coins(amount.u128(), security, &security_pool, sender)?;
+    res.add_message(transfer_msg);
+
+    // Not working ^
 
     Ok(res)
 }
@@ -301,6 +320,7 @@ fn try_get_trader_state(deps: Deps, address: HumanAddr) -> Result<QueryResponse,
         security,
         stablecoin,
         loans: trader_state.loans,
+        loan_cap: trader_state.loan_cap,
     })?;
     Ok(bin)
 }

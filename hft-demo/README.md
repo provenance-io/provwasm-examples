@@ -63,9 +63,12 @@ Provenance exchange can scale.
 Let me know if this makes sense. It would be very powerful to have the ability to run this demo,
 and demonstrate to entities like DTCC, brokers and Shareworks.
 
-## Blockchain Setup
+## Smart Contract Demo
 
-### Start
+The following demonstrates what is required to set up, deploy, and execute the smart contract
+portion of the above described demo.
+
+### Blockchain Setup
 
 Clear all current state, install the `provenanced` command, then start a 4-node localnet.
 
@@ -367,7 +370,7 @@ Onboard the trader account with the contract (NOTE: trader address value may be 
 ```bash
 provenanced tx wasm execute \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"add_trader":{"address":"tp1rr9p0m60xy6uvpprq6nlpp6tfp0a8t9adrr0av"}}' \
+    '{"add_trader":{"address":"tp1crteypzf3l90edkffycw24s0nnqzluexp80j7w"}}' \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \
@@ -379,16 +382,100 @@ provenanced tx wasm execute \
     --testnet | jq
 ```
 
-Query the inital trader state, showing stock balance, stablecoin balance, and debt.
+Query the inital trader state, showing stock balance, stablecoin balance, debt, and loan cap.
 (NOTE: trader address value may be different)
 
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp1rr9p0m60xy6uvpprq6nlpp6tfp0a8t9adrr0av"}}' \
+    '{"get_trader_state":{"address":"tp1crteypzf3l90edkffycw24s0nnqzluexp80j7w"}}' \
     --testnet -o json | jq
  ```
 
 ## Execution
 
-TODO
+### Period 1
+
+To execute a buy using `stablecoin`, but still requiring a loan.
+
+```bash
+provenanced tx wasm execute \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"buy_stock":{"amount":"300"}}' \
+    --amount 100demostablecoin \
+    --from trader \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5500nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet | jq
+```
+
+Query trader state.
+
+```bash
+provenanced q wasm contract-state smart \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"get_trader_state":{"address":"tp1crteypzf3l90edkffycw24s0nnqzluexp80j7w"}}' \
+    --testnet -o json | jq
+ ```
+
+### Period 2
+
+To execute a buy, but don't send any `stablecoin`, requring more loans to be taken out
+(remaining under cap).
+
+```bash
+provenanced tx wasm execute \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"buy_stock":{"amount":"500"}}' \
+    --from trader \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5500nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet | jq
+```
+
+Query trader state.
+
+```bash
+provenanced q wasm contract-state smart \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"get_trader_state":{"address":"tp1crteypzf3l90edkffycw24s0nnqzluexp80j7w"}}' \
+    --testnet -o json | jq
+ ```
+
+### Period 3
+
+To execute a sell, paying off debt. Result is trader has some `stablecoin` and some `stock`.
+
+```bash
+provenanced tx wasm execute \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"sell_stock":{"amount":"750"}}' \
+    --from trader \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet | jq
+```
+
+Query trader state.
+
+```bash
+provenanced q wasm contract-state smart \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"get_trader_state":{"address":"tp1crteypzf3l90edkffycw24s0nnqzluexp80j7w"}}' \
+    --testnet -o json | jq
+ ```

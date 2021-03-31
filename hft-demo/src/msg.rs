@@ -29,4 +29,5 @@ pub struct TraderStateResponse {
     pub security: Uint128,
     pub stablecoin: Uint128,
     pub loans: Uint128,
+    pub loan_cap: Uint128,
 }
