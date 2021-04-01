@@ -104,7 +104,7 @@ provenanced tx bank send \
     --fees 2000nhash \
     --broadcast-mode block \
     --yes \
-    --testnet
+    --testnet | jq
 ```
 
 ### Markers
@@ -125,7 +125,7 @@ provenanced tx marker new 1000000000000demosecurity \
     --fees 5000nhash \
     --broadcast-mode block \
     --yes \
-    --testnet
+    --testnet | jq
 ```
 
 Create the `stablecoin` marker for the demo.
@@ -141,7 +141,7 @@ provenanced tx marker new 1000000demostablecoin \
     --fees 5000nhash \
     --broadcast-mode block \
     --yes \
-    --testnet
+    --testnet | jq
 ```
 
 Grant access on the markers to the `node0` account. We need this to give the smart contract the
@@ -162,7 +162,7 @@ provenanced tx marker grant \
     --fees 5000nhash \
     --broadcast-mode block \
     --yes \
-    --testnet
+    --testnet | jq
 ```
 
 Grants on the `stablecoin` marker.
@@ -180,7 +180,7 @@ provenanced tx marker grant \
     --fees 5000nhash \
     --broadcast-mode block \
     --yes \
-    --testnet
+    --testnet | jq
 ```
 
 Finalize the `stock` marker
@@ -195,7 +195,7 @@ provenanced tx marker finalize demosecurity \
     --fees 5000nhash \
     --broadcast-mode block \
     --yes \
-    --testnet
+    --testnet | jq
 ```
 
 Finalize the `stablecoin` marker
@@ -210,7 +210,7 @@ provenanced tx marker finalize demostablecoin \
     --fees 5000nhash \
     --broadcast-mode block \
     --yes \
-    --testnet
+    --testnet | jq
 ```
 
 Activate the `stock` marker, minting and escrowing the supply
@@ -225,7 +225,7 @@ provenanced tx marker activate demosecurity \
     --fees 5000nhash \
     --broadcast-mode block \
     --yes \
-    --testnet
+    --testnet | jq
 ```
 
 Activate the `stablecoin` marker, minting and escrowing the supply
@@ -240,7 +240,7 @@ provenanced tx marker activate demostablecoin \
     --fees 5000nhash \
     --broadcast-mode block \
     --yes \
-    --testnet
+    --testnet | jq
 ```
 
 Now, fund the trader account from the `stablecoin` marker.
@@ -257,7 +257,7 @@ provenanced tx marker withdraw demostablecoin \
     --fees 5000nhash \
     --broadcast-mode block \
     --yes \
-    --testnet
+    --testnet | jq
 ```
 
 The `trader` account should now have `nhash` to pay network fees, and `stablecoin` for purchasing
@@ -369,7 +369,7 @@ Onboard the trader account with the contract (NOTE: trader address value may be 
 ```bash
 provenanced tx wasm execute \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"add_trader":{"address":"tp19q6ula490s767cjt0xzn3k7rhnghfyc9t8hd7p"}}' \
+    '{"add_trader":{"address":"tp17rvk3ws8qg69jl0d8zlwzhh4vg7la3fg5ydk7j"}}' \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \
@@ -387,9 +387,22 @@ Query the inital trader state, showing stock balance, stablecoin balance, debt, 
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp19q6ula490s767cjt0xzn3k7rhnghfyc9t8hd7p"}}' \
+    '{"get_trader_state":{"address":"tp17rvk3ws8qg69jl0d8zlwzhh4vg7la3fg5ydk7j"}}' \
     --testnet -o json | jq
  ```
+
+Expected output
+
+```json
+
+  "data": {
+    "security": "0",
+    "stablecoin": "100",
+    "loans": "0",
+    "loan_cap": "900"
+  }
+}
+```
 
 ## Execution
 
@@ -407,7 +420,7 @@ provenanced tx wasm execute \
     --home build/node0 \
     --chain-id chain-local \
     --gas auto \
-    --fees 5500nhash \
+    --fees 6500nhash \
     --broadcast-mode block \
     --yes \
     --testnet | jq
@@ -418,9 +431,21 @@ Query trader state.
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp19q6ula490s767cjt0xzn3k7rhnghfyc9t8hd7p"}}' \
+    '{"get_trader_state":{"address":"tp17rvk3ws8qg69jl0d8zlwzhh4vg7la3fg5ydk7j"}}' \
     --testnet -o json | jq
  ```
+
+ Expected output
+
+ ```json
+{
+  "data": {
+    "security": "300",
+    "stablecoin": "0",
+    "loans": "200",
+    "loan_cap": "900"
+  }
+```
 
 ### Period 2
 
@@ -436,7 +461,7 @@ provenanced tx wasm execute \
     --home build/node0 \
     --chain-id chain-local \
     --gas auto \
-    --fees 5500nhash \
+    --fees 6500nhash \
     --broadcast-mode block \
     --yes \
     --testnet | jq
@@ -447,9 +472,22 @@ Query trader state.
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp19q6ula490s767cjt0xzn3k7rhnghfyc9t8hd7p"}}' \
+    '{"get_trader_state":{"address":"tp17rvk3ws8qg69jl0d8zlwzhh4vg7la3fg5ydk7j"}}' \
     --testnet -o json | jq
  ```
+
+ Expected output
+
+```json
+{
+  "data": {
+    "security": "800",
+    "stablecoin": "0",
+    "loans": "700",
+    "loan_cap": "900"
+  }
+}
+```
 
 ### Period 3
 
@@ -465,7 +503,7 @@ provenanced tx wasm execute \
     --home build/node0 \
     --chain-id chain-local \
     --gas auto \
-    --fees 5000nhash \
+    --fees 6500nhash \
     --broadcast-mode block \
     --yes \
     --testnet | jq
@@ -476,6 +514,19 @@ Query trader state.
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp19q6ula490s767cjt0xzn3k7rhnghfyc9t8hd7p"}}' \
+    '{"get_trader_state":{"address":"tp17rvk3ws8qg69jl0d8zlwzhh4vg7la3fg5ydk7j"}}' \
     --testnet -o json | jq
  ```
+
+Expected output
+
+```json
+{
+  "data": {
+    "security": "50",
+    "stablecoin": "50",
+    "loans": "0",
+    "loan_cap": "900"
+  }
+}
+```
