@@ -320,15 +320,81 @@ fn try_get_trader_state(deps: Deps, address: HumanAddr) -> Result<QueryResponse,
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
-    // use cosmwasm_std::testing::{mock_env, mock_info};
-    // use cosmwasm_std::{from_binary, CosmosMsg, StdError};
-    // use provwasm_mocks::mock_dependencies;
-    // use provwasm_std::{NameMsgParams, Names, ProvenanceMsgParams};
+    use super::*;
+    use cosmwasm_std::from_binary;
+    use cosmwasm_std::testing::{mock_env, mock_info};
+    use provwasm_mocks::mock_dependencies;
 
     #[test]
-    fn init_test() {
-        // TODO
+    fn valid_init() {
+        // Create default provenance mocks.
+        let mut deps = mock_dependencies(&[]);
+        let env = mock_env();
+        let info = mock_info("sender", &[]);
+
+        // Give the contract a name
+        let msg = InitMsg {
+            security: "security".into(),
+            stablecoin: "stablecoin".into(),
+        };
+
+        // Ensure no messages were created.
+        let res = instantiate(deps.as_mut(), env, info, msg).unwrap();
+        assert_eq!(0, res.messages.len());
+
+        // Read state
+        let config_state = config_read(&deps.storage).load().unwrap();
+        assert_eq!(config_state.security, "security");
+        assert_eq!(config_state.stablecoin, "stablecoin");
+    }
+
+    #[test]
+    fn add_trader_test() {
+        // Create default standard mocks.
+        let mut deps = cosmwasm_std::testing::mock_dependencies(&[]);
+        let stablecoins = coin(100, "stablecoin");
+        deps.querier
+            .update_balance(HumanAddr::from("trader"), vec![stablecoins]);
+
+        // Init so we have config state.
+        instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("sender", &[]),
+            InitMsg {
+                security: "security".into(),
+                stablecoin: "stablecoin".into(),
+            },
+        )
+        .unwrap(); // panics on error
+
+        // Onboard the trader (sets trader state, including loan cap).
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("sender", &[]),
+            ExecuteMsg::AddTrader {
+                address: HumanAddr::from("trader"),
+            },
+        )
+        .unwrap(); // panics on error
+
+        // Query trader state
+        let bin = query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::GetTraderState {
+                address: "trader".into(),
+            },
+        )
+        .unwrap(); // panics on error
+
+        // Ensure trader state has expected values
+        let rep: TraderStateResponse = from_binary(&bin).unwrap();
+        assert_eq!(rep.security, Uint128::zero());
+        assert_eq!(rep.stablecoin, Uint128(100));
+        assert_eq!(rep.loans, Uint128::zero());
+        assert_eq!(rep.loan_cap, Uint128(900));
     }
 
     #[test]
@@ -338,11 +404,6 @@ mod tests {
 
     #[test]
     fn sell_test() {
-        // TODO
-    }
-
-    #[test]
-    fn query_test() {
         // TODO
     }
 }
