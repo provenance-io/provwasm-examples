@@ -16,12 +16,12 @@ As such, I’d like to build a proof of concept that I think will be extremely p
 demonstrating the efficacy of an exchange running on Provenance. The proof of concept would work as
 follows.
 
-We establish a trader (“trader”) who has a starting stablecoin balance.  Trader will, at random,
-buy or sell a single security (“stock”) at a price of $1.  Trader will buy or sell with equal
+We establish a trader ("trader") who has a starting stablecoin balance.  Trader will, at random,
+buy or sell a single security ("stock") at a price of $1.  Trader will buy or sell with equal
 probability between 100 and 1000 shares of stock (uniformly distributed).  Trader instantly settles
 with its counterparty. Trader never is short stock.
 
-We also establish a lender (“lender”).  Lender will loan trader up to 90% of the value of a stock
+We also establish a lender ("lender").  Lender will loan trader up to 90% of the value of a stock
 purchase, subject to need.  Trader pays back Lender when there is a Lender balance, and trader has
 cash.
 
@@ -60,9 +60,6 @@ cash balance.  This demonstrates that real time netting and smart contract lendi
 Provenance.  We also want to push as many transactions as possible per second.  This demonstrates
 Provenance exchange can scale.
 
-Let me know if this makes sense. It would be very powerful to have the ability to run this demo,
-and demonstrate to entities like DTCC, brokers and Shareworks.
-
 ## Smart Contract Demo
 
 The following demonstrates what is required to set up, deploy, and execute the smart contract
@@ -86,6 +83,24 @@ First, create `trader` account keys
 
 ```bash
 provenanced keys add trader --home build/node0 --keyring-backend test --testnet
+```
+
+If you want to use the trader from this document, use the following to restore the keys locally.
+
+```text
+- name: trader
+  type: local
+  address: tp10etrj2yc8l6sdlc3tct3tzgtdhtj6y7cppm34x
+  pubkey: tppub1addwnpepqtrpf5m43749en44jv3cm2nucldw2457q5l3rd27apnn95c98h322xd8u8m
+  mnemonic: ""
+  threshold: 0
+  pubkeys: []
+
+
+**Important** write this mnemonic phrase in a safe place.
+It is the only way to recover your account if you ever forget your password.
+
+odor invite ivory cheese actor wheat mushroom notable broom lucky ensure alarm attract shallow enrich feature good ring unknown deal inner now flat wool
 ```
 
 Then, fund the `trader` account with `nhash` to pay blockchain fees. We will give the trader
@@ -343,7 +358,7 @@ provenanced tx marker grant \
     --fees 5000nhash \
     --broadcast-mode block \
     --yes \
-    --testnet
+    --testnet | jq
 ```
 
 Add grants to the smart contract for the `stablecoin` marker.
@@ -361,7 +376,7 @@ provenanced tx marker grant \
     --fees 5000nhash \
     --broadcast-mode block \
     --yes \
-    --testnet
+    --testnet | jq
 ```
 
 Onboard the trader account with the contract (NOTE: trader address value may be different).
@@ -369,7 +384,7 @@ Onboard the trader account with the contract (NOTE: trader address value may be 
 ```bash
 provenanced tx wasm execute \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"add_trader":{"address":"tp17rvk3ws8qg69jl0d8zlwzhh4vg7la3fg5ydk7j"}}' \
+    '{"add_trader":{"address":"tp10etrj2yc8l6sdlc3tct3tzgtdhtj6y7cppm34x"}}' \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \
@@ -387,7 +402,7 @@ Query the inital trader state, showing stock balance, stablecoin balance, debt, 
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp17rvk3ws8qg69jl0d8zlwzhh4vg7la3fg5ydk7j"}}' \
+    '{"get_trader_state":{"address":"tp10etrj2yc8l6sdlc3tct3tzgtdhtj6y7cppm34x"}}' \
     --testnet -o json | jq
  ```
 
@@ -431,7 +446,7 @@ Query trader state.
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp17rvk3ws8qg69jl0d8zlwzhh4vg7la3fg5ydk7j"}}' \
+    '{"get_trader_state":{"address":"tp10etrj2yc8l6sdlc3tct3tzgtdhtj6y7cppm34x"}}' \
     --testnet -o json | jq
  ```
 
@@ -472,7 +487,7 @@ Query trader state.
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp17rvk3ws8qg69jl0d8zlwzhh4vg7la3fg5ydk7j"}}' \
+    '{"get_trader_state":{"address":"tp10etrj2yc8l6sdlc3tct3tzgtdhtj6y7cppm34x"}}' \
     --testnet -o json | jq
  ```
 
@@ -514,7 +529,7 @@ Query trader state.
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_trader_state":{"address":"tp17rvk3ws8qg69jl0d8zlwzhh4vg7la3fg5ydk7j"}}' \
+    '{"get_trader_state":{"address":"tp10etrj2yc8l6sdlc3tct3tzgtdhtj6y7cppm34x"}}' \
     --testnet -o json | jq
  ```
 
@@ -525,6 +540,48 @@ Expected output
   "data": {
     "security": "50",
     "stablecoin": "50",
+    "loans": "0",
+    "loan_cap": "900"
+  }
+}
+```
+
+### Period 4
+
+Execute a buy, sending too much `stablecoin`.
+
+```bash
+provenanced tx wasm execute \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"buy_stock":{"amount":"10"}}' \
+    --amount 20demostablecoin \
+    --from trader \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 6500nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet | jq
+```
+
+Query trader state.
+
+```bash
+provenanced q wasm contract-state smart \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"get_trader_state":{"address":"tp10etrj2yc8l6sdlc3tct3tzgtdhtj6y7cppm34x"}}' \
+    --testnet -o json | jq
+ ```
+
+Should get the overpayment amount of  10 `stablecoin` back
+
+```json
+{
+  "data": {
+    "security": "60",
+    "stablecoin": "40",
     "loans": "0",
     "loan_cap": "900"
   }

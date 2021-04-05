@@ -146,9 +146,19 @@ fn try_buy_stock(
                 None => Err(ContractError::UnknownTrader {}),
             }
         })?;
+
+    // Issue a refund if the funds sent aren't exactly the amount necessary.
+    } else if info.funds.len() == 1 && info.funds[0].amount > price.amount {
+        let refund_amount = (info.funds[0].amount - price.amount)?;
+        let refund = coin(refund_amount.u128(), stablecoin);
+        let refund_msg: CosmosMsg<ProvenanceMsg> = CosmosMsg::Bank(BankMsg::Send {
+            to_address: info.sender.clone(),
+            amount: vec![refund],
+        });
+        res.add_message(refund_msg);
     }
 
-    // TODO: What to do if trader sent more than required - error?
+    // Withdraw stock to trader's account.
     let stock_msg = withdraw_coins(security, amount.u128(), security, &info.sender)?;
     res.add_message(stock_msg);
 
