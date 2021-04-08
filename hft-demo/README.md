@@ -460,6 +460,7 @@ provenanced q wasm contract-state smart \
     "loans": "200",
     "loan_cap": "900"
   }
+}
 ```
 
 ### Period 2
