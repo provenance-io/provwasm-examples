@@ -1,4 +1,4 @@
-use cosmwasm_std::{Decimal, HumanAddr};
+use cosmwasm_std::Decimal;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -9,14 +9,14 @@ use crate::state::State;
 pub struct InitMsg {
     pub contract_name: String,
     pub purchase_denom: String,
-    pub merchant_address: HumanAddr,
+    pub merchant_address: String,
     pub fee_percent: Decimal,
 }
 
 /// A message sent to transfer funds and collect fees for a purchase.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum HandleMsg {
+pub enum ExecuteMsg {
     Purchase { id: String },
 }
 

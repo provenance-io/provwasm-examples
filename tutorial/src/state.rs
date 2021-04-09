@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Decimal, HumanAddr, Storage};
+use cosmwasm_std::{Addr, Decimal, Storage};
 use cosmwasm_storage::{singleton, singleton_read, ReadonlySingleton, Singleton};
 
 pub static CONFIG_KEY: &[u8] = b"config";
@@ -9,14 +9,12 @@ pub static CONFIG_KEY: &[u8] = b"config";
 /// Fields that comprise the smart contract state
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
-    // The contract name
-    pub contract_name: String,
     // The required purchase denomination
     pub purchase_denom: String,
     // The merchant account
-    pub merchant_address: HumanAddr,
+    pub merchant_address: Addr,
     // The fee collection account
-    pub fee_collection_address: HumanAddr,
+    pub fee_collection_address: Addr,
     // The percentage to collect on transfers
     pub fee_percent: Decimal,
 }

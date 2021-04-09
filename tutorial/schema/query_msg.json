@@ -12,7 +12,8 @@
         "query_request": {
           "type": "object"
         }
-      }
+      },
+      "additionalProperties": false
     }
   ]
 }
