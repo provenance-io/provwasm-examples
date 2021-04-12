@@ -6,7 +6,7 @@ use provwasm_std::{bind_name, NameBinding, ProvenanceMsg};
 use std::ops::Mul;
 
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InitMsg, MigrateMsg, QueryMsg};
+use crate::msg::{ExecuteMsg, InitMsg, QueryMsg};
 use crate::state::{config, config_read, State};
 
 /// Initialize the contract
@@ -23,9 +23,9 @@ pub fn instantiate(
     }
 
     // Ensure there are limits on fees.
-    if msg.fee_percent.is_zero() || msg.fee_percent > Decimal::percent(15) {
+    if msg.fee_percent.is_zero() || msg.fee_percent > Decimal::percent(25) {
         return Err(StdError::generic_err(
-            "fee percent must be > 0.0 and <= 0.15",
+            "fee percent must be > 0.0 and <= 0.25",
         ));
     }
 
@@ -151,24 +151,6 @@ pub fn query(
     }
 }
 
-/// Called when migrating a contract instance to a new code ID.
-pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
-    // Ensure the updated fee percentage is within the new range.
-    if msg.new_fee_percent.is_zero() || msg.new_fee_percent > Decimal::percent(15) {
-        let errm = "fee percent must be > 0.0 and <= 0.15";
-        return Err(ContractError::Std(StdError::generic_err(errm)));
-    }
-
-    // Get mutable state, ensure the message sender is the fee collector, and update fees.
-    config(deps.storage).update(|mut state: State| -> Result<_, ContractError> {
-        state.fee_percent = msg.new_fee_percent;
-        Ok(state)
-    })?;
-
-    // Return the default success response
-    Ok(Response::default())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,7 +235,7 @@ mod tests {
                 contract_name: "tutorial.sc.pb".into(),
                 purchase_denom: "pcoin".into(),
                 merchant_address: "merchant".into(),
-                fee_percent: Decimal::percent(37), // error: > 15%
+                fee_percent: Decimal::percent(37), // error: > 25%
             },
         )
         .unwrap_err();
@@ -261,7 +243,7 @@ mod tests {
         // Ensure the expected error was returned
         match err {
             StdError::GenericErr { msg, .. } => {
-                assert_eq!(msg, "fee percent must be > 0.0 and <= 0.15")
+                assert_eq!(msg, "fee percent must be > 0.0 and <= 0.25")
             }
             _ => panic!("unexpected init error"),
         }
@@ -433,79 +415,6 @@ mod tests {
                 assert_eq!(msg, "invalid purchase funds: 100fakecoin")
             }
             _ => panic!("unexpected handle error"),
-        }
-    }
-
-    #[test]
-    fn valid_migrate() {
-        // Create mocks
-        let mut deps = mock_dependencies(&[]);
-
-        // Create config state
-        instantiate(
-            deps.as_mut(),
-            mock_env(),
-            mock_info("feebucket", &[]),
-            InitMsg {
-                contract_name: "tutorial.sc.pb".into(),
-                purchase_denom: "pcoin".into(),
-                merchant_address: "merchant".into(),
-                fee_percent: Decimal::percent(5),
-            },
-        )
-        .unwrap(); // Panics on error
-
-        // Migrate with the correct account and fee percent within valid range
-        migrate(
-            deps.as_mut(),
-            mock_env(),
-            MigrateMsg {
-                new_fee_percent: Decimal::percent(10),
-            },
-        )
-        .unwrap(); // Panics on error
-
-        // Query and check fee percentage was updated
-        let bin = query(deps.as_ref(), mock_env(), QueryMsg::QueryRequest {}).unwrap();
-        let resp: QueryResponse = from_binary(&bin).unwrap();
-        assert_eq!(resp.fee_percent, Decimal::percent(10))
-    }
-
-    #[test]
-    fn invalid_migrate() {
-        // Create mocks
-        let mut deps = mock_dependencies(&[]);
-
-        // Create config state
-        instantiate(
-            deps.as_mut(),
-            mock_env(),
-            mock_info("feebucket", &[]),
-            InitMsg {
-                contract_name: "tutorial.sc.pb".into(),
-                purchase_denom: "pcoin".into(),
-                merchant_address: "merchant".into(),
-                fee_percent: Decimal::percent(5),
-            },
-        )
-        .unwrap(); // Panics on error
-
-        // Migrate with an invalid fee
-        let err = migrate(
-            deps.as_mut(),
-            mock_env(),
-            MigrateMsg {
-                new_fee_percent: Decimal::percent(37), // error
-            },
-        )
-        .unwrap_err();
-
-        // Ensure the expected error was returned.
-        match err {
-            ContractError::Std(StdError::GenericErr { msg, .. }) => {
-                assert_eq!(msg, "fee percent must be > 0.0 and <= 0.15")
-            }
-            _ => panic!("unexpected init error"),
         }
     }
 }

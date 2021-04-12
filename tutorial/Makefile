@@ -1,5 +1,5 @@
 .PHONY: all
-all: fmt build test schema
+all: fmt build test lint schema
 
 .PHONY: fmt
 fmt:
@@ -34,7 +34,7 @@ optimize:
 	@docker run --rm -v $(CURDIR):/code \
 		--mount type=volume,source=tutorial_cache,target=/code/target \
 		--mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
-		cosmwasm/rust-optimizer:0.10.9
+		cosmwasm/rust-optimizer:0.11.0
 
 .PHONY: install
 install: optimize

@@ -29,10 +29,3 @@ pub enum QueryMsg {
 
 /// A type alias for contract state.
 pub type QueryResponse = State;
-
-/// Migrate the contract, setting a new fee percentage.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub struct MigrateMsg {
-    pub new_fee_percent: Decimal,
-}
