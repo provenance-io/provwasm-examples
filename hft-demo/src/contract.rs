@@ -90,8 +90,13 @@ fn try_buy_stock(
     // Error if trader sent zero funds and has reached or exceeded the loan cap
     let trader_key = deps.api.canonical_address(&info.sender)?;
     let trader_state = trader_bucket_read(deps.storage).load(&trader_key)?;
+
     if info.funds.is_empty() && trader_state.loans >= trader_state.loan_cap {
-        return Err(ContractError::LoanCapExceeded {});
+        return Err(ContractError::LoanCapExceeded {
+            amount,
+            loans: trader_state.loans,
+            loan_cap: trader_state.loan_cap,
+        });
     }
 
     // Load security and stablecoin marker denoms.
@@ -124,7 +129,11 @@ fn try_buy_stock(
         // Ensure trader is under loan cap after borrowing.
         let max_loan_amount = (trader_state.loan_cap - trader_state.loans)?;
         if loan_amount > max_loan_amount {
-            return Err(ContractError::LoanCapExceeded {});
+            return Err(ContractError::LoanCapExceeded {
+                amount,
+                loans: trader_state.loans,
+                loan_cap: trader_state.loan_cap,
+            });
         }
 
         // Escrow loan amount from the stablecoin loan pool marker into the contract
