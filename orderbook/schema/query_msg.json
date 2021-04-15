@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QueryMsg",
+  "anyOf": [
+    {
+      "type": "object",
+      "required": [
+        "get_buy_orders"
+      ],
+      "properties": {
+        "get_buy_orders": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "get_sell_orders"
+      ],
+      "properties": {
+        "get_sell_orders": {
+          "type": "object"
+        }
+      }
+    }
+  ]
+}
