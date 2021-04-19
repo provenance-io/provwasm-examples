@@ -5,8 +5,9 @@
   "required": [
     "buy_denom",
     "contract_admin",
+    "price",
     "sell_denom",
-    "sell_price"
+    "sell_ratio"
   ],
   "properties": {
     "buy_denom": {
@@ -15,10 +16,13 @@
     "contract_admin": {
       "$ref": "#/definitions/HumanAddr"
     },
+    "price": {
+      "$ref": "#/definitions/Uint128"
+    },
     "sell_denom": {
       "type": "string"
     },
-    "sell_price": {
+    "sell_ratio": {
       "$ref": "#/definitions/Decimal"
     }
   },
@@ -28,6 +32,9 @@
       "type": "string"
     },
     "HumanAddr": {
+      "type": "string"
+    },
+    "Uint128": {
       "type": "string"
     }
   }

@@ -15,13 +15,15 @@ pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    _msg: InitMsg,
+    msg: InitMsg,
 ) -> Result<Response, ContractError> {
+    // TODO: Validate that price is > 0
     let state = State {
         contract_admin: info.sender,
-        sell_denom: "nhash".into(),         // Force nano-hash
-        buy_denom: "stablecoin5201".into(), // Assume 1 coin is $0.01
-        sell_price: Decimal::from_ratio(15u128, 1000000000u128), // Assume $0.15 per hash
+        sell_denom: "nhash".into(), // Force nano-hash
+        buy_denom: msg.buy_denom,
+        price: msg.price,
+        sell_ratio: Decimal::from_ratio(msg.price.u128(), 1000000000u128), // Price per 1 hash
     };
     config(deps.storage).save(&state)?;
     Ok(Response::default())
@@ -60,11 +62,6 @@ fn try_buy(
     let state = config_read(deps.storage).load()?;
 
     // Ensure the funds are valid
-    if funds.amount < Uint128(15) {
-        return Err(ContractError::InvalidFunds {
-            message: format!("buy amount must be >= 15: got {}", funds.amount),
-        });
-    }
     if funds.denom != state.buy_denom {
         return Err(ContractError::InvalidFunds {
             message: format!(
@@ -86,9 +83,10 @@ fn try_buy(
         &order_key,
         &BuyOrder {
             id: id.clone(),
+            price: state.price,
             ts: env.block.time,
             buyer: info.sender,
-            buy: funds,
+            amount: funds,
         },
     )?;
 
@@ -115,7 +113,7 @@ fn try_sell(
     // Load config state
     let state = config_read(deps.storage).load()?;
 
-    // Ensure the funds are valid
+    // Ensure the funds are valid (ie at least 1 hash was sent)
     if funds.amount < Uint128(1000000000) {
         return Err(ContractError::InvalidFunds {
             message: format!("sell amount must be >= 1000000000: got {}", funds.amount),
@@ -142,10 +140,10 @@ fn try_sell(
         &order_key,
         &SellOrder {
             id: id.clone(),
+            price: state.price,
             ts: env.block.time,
             seller: info.sender,
-            sell: funds.clone(),
-            buy: funds.amount * state.sell_price,
+            amount: funds,
         },
     )?;
 
@@ -171,12 +169,12 @@ fn try_get_buy_orders(deps: Deps) -> Result<QueryResponse, ContractError> {
         .collect();
     let mut buy_orders: Vec<BuyOrder> = res?.into_iter().map(|(_, v)| v).collect();
 
-    // Sort
+    // Sort by price, then time.
     buy_orders.sort_by(|a, b| {
-        if a.buy.amount != b.buy.amount {
-            b.buy.amount.cmp(&a.buy.amount) // flip comparison for descending
+        if a.price != b.price {
+            b.price.cmp(&a.price)
         } else {
-            a.ts.cmp(&b.ts) // if amounts are the same, order by timestamp
+            a.ts.cmp(&b.ts)
         }
     });
 
@@ -193,12 +191,12 @@ fn try_get_sell_orders(deps: Deps) -> Result<QueryResponse, ContractError> {
         .collect();
     let mut sell_orders: Vec<SellOrder> = res?.into_iter().map(|(_, v)| v).collect();
 
-    // Sort
+    // Sort by price, then time.
     sell_orders.sort_by(|a, b| {
-        if a.sell.amount != b.sell.amount {
-            b.sell.amount.cmp(&a.sell.amount) // flip comparison for descending
+        if a.price != b.price {
+            b.price.cmp(&a.price)
         } else {
-            a.ts.cmp(&b.ts) // if amounts are the same, order by timestamp
+            a.ts.cmp(&b.ts)
         }
     });
 

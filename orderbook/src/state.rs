@@ -16,26 +16,28 @@ pub struct State {
     pub contract_admin: HumanAddr,
     pub sell_denom: String,
     pub buy_denom: String,
-    pub sell_price: Decimal, // sell_amount * sell_price = required_buy_price
+    pub price: Uint128,
+    pub sell_ratio: Decimal, // sell_amount * price_per_unit = required_buy
 }
 
 /// Persisted buy when a real-time sell match is not found.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct BuyOrder {
     pub id: String,
+    pub price: Uint128,
     pub ts: u64,
     pub buyer: HumanAddr,
-    pub buy: Coin,
+    pub amount: Coin,
 }
 
 /// Persisted sell when a real-time buy matches are not found.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SellOrder {
     pub id: String,
+    pub price: Uint128,
     pub ts: u64,
     pub seller: HumanAddr,
-    pub sell: Coin,
-    pub buy: Uint128, // Pre-calculated required buy amount at ts
+    pub amount: Coin,
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
