@@ -11,11 +11,15 @@
         "buy": {
           "type": "object",
           "required": [
-            "id"
+            "id",
+            "price"
           ],
           "properties": {
             "id": {
               "type": "string"
+            },
+            "price": {
+              "$ref": "#/definitions/Uint128"
             }
           }
         }
@@ -30,15 +34,24 @@
         "sell": {
           "type": "object",
           "required": [
-            "id"
+            "id",
+            "price"
           ],
           "properties": {
             "id": {
               "type": "string"
+            },
+            "price": {
+              "$ref": "#/definitions/Uint128"
             }
           }
         }
       }
     }
-  ]
+  ],
+  "definitions": {
+    "Uint128": {
+      "type": "string"
+    }
+  }
 }

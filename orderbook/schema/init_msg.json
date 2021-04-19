@@ -3,19 +3,10 @@
   "title": "InitMsg",
   "type": "object",
   "required": [
-    "buy_denom",
-    "price"
+    "buy_denom"
   ],
   "properties": {
     "buy_denom": {
-      "type": "string"
-    },
-    "price": {
-      "$ref": "#/definitions/Uint128"
-    }
-  },
-  "definitions": {
-    "Uint128": {
       "type": "string"
     }
   }

@@ -9,6 +9,9 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
+    #[error("InvalidPrice: {message:?}")]
+    InvalidPrice { message: String },
+
     #[error("DuplicateBuy: {id:?}")]
     DuplicateBuy { id: String },
 

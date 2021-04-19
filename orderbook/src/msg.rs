@@ -6,14 +6,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
     pub buy_denom: String,
-    pub price: Uint128, // Price per 1 hash
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    Buy { id: String },  // Will require sent funds to be buy_denom (ie stablecoin)
-    Sell { id: String }, // Will require sent funds to be sell_denom (ie nhash)
+    Buy { id: String, price: Uint128 }, // Price per 1 hash
+    Sell { id: String, price: Uint128 },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

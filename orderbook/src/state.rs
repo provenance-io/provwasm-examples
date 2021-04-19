@@ -1,4 +1,4 @@
-use cosmwasm_std::{Coin, Decimal, HumanAddr, Uint128};
+use cosmwasm_std::{Coin, HumanAddr, Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -16,8 +16,6 @@ pub struct State {
     pub contract_admin: HumanAddr,
     pub sell_denom: String,
     pub buy_denom: String,
-    pub price: Uint128,
-    pub sell_ratio: Decimal, // sell_amount * price_per_unit = required_buy
 }
 
 /// Persisted buy when a real-time sell match is not found.

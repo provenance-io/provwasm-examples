@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    to_binary, Decimal, Deps, DepsMut, Env, MessageInfo, Order, QueryResponse, Response, StdResult,
-    Uint128, KV,
+    to_binary, Deps, DepsMut, Env, MessageInfo, Order, QueryResponse, Response, StdResult, Uint128,
+    KV,
 };
 
 use crate::error::ContractError;
@@ -17,13 +17,11 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InitMsg,
 ) -> Result<Response, ContractError> {
-    // TODO: Validate that price is > 0
+    // Create and store config state.
     let state = State {
         contract_admin: info.sender,
         sell_denom: "nhash".into(), // Force nano-hash
         buy_denom: msg.buy_denom,
-        price: msg.price,
-        sell_ratio: Decimal::from_ratio(msg.price.u128(), 1000000000u128), // Price per 1 hash
     };
     config(deps.storage).save(&state)?;
     Ok(Response::default())
@@ -37,8 +35,8 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Buy { id } => try_buy(deps, env, info, id),
-        ExecuteMsg::Sell { id } => try_sell(deps, env, info, id),
+        ExecuteMsg::Buy { id, price } => try_buy(deps, env, info, id, price),
+        ExecuteMsg::Sell { id, price } => try_sell(deps, env, info, id, price),
     }
 }
 
@@ -49,7 +47,15 @@ fn try_buy(
     env: Env,
     info: MessageInfo,
     id: String,
+    price: Uint128,
 ) -> Result<Response, ContractError> {
+    // Ensure price is non-zero
+    if price.is_zero() {
+        return Err(ContractError::InvalidPrice {
+            message: "price must be > 0".into(),
+        });
+    }
+
     // Ensure the correct funds where sent
     if info.funds.len() != 1 {
         return Err(ContractError::InvalidFunds {
@@ -62,6 +68,11 @@ fn try_buy(
     let state = config_read(deps.storage).load()?;
 
     // Ensure the funds are valid
+    if funds.amount.is_zero() {
+        return Err(ContractError::InvalidFunds {
+            message: "buy amount must be > 0".into(),
+        });
+    }
     if funds.denom != state.buy_denom {
         return Err(ContractError::InvalidFunds {
             message: format!(
@@ -83,17 +94,18 @@ fn try_buy(
         &order_key,
         &BuyOrder {
             id: id.clone(),
-            price: state.price,
+            price,
             ts: env.block.time,
             buyer: info.sender,
             amount: funds,
         },
     )?;
 
-    // TODO
-    // Execute matching algorithm here
-
-    Ok(Response::default())
+    // Create response and add ID to outgoing SC `wasm` event
+    let mut res = Response::new();
+    res.add_attribute("action", "orderbook.buy");
+    res.add_attribute("id", id);
+    Ok(res)
 }
 
 fn try_sell(
@@ -101,7 +113,15 @@ fn try_sell(
     env: Env,
     info: MessageInfo,
     id: String,
+    price: Uint128,
 ) -> Result<Response, ContractError> {
+    // Ensure price is non-zero
+    if price.is_zero() {
+        return Err(ContractError::InvalidPrice {
+            message: "price must be > 0".into(),
+        });
+    }
+
     // Ensure the correct number of funds where sent.
     if info.funds.len() != 1 {
         return Err(ContractError::InvalidFunds {
@@ -116,7 +136,10 @@ fn try_sell(
     // Ensure the funds are valid (ie at least 1 hash was sent)
     if funds.amount < Uint128(1000000000) {
         return Err(ContractError::InvalidFunds {
-            message: format!("sell amount must be >= 1000000000: got {}", funds.amount),
+            message: format!(
+                "sell amount must be >= 1000000000nhash: got {}",
+                funds.amount
+            ),
         });
     }
     if funds.denom != state.sell_denom {
@@ -140,17 +163,18 @@ fn try_sell(
         &order_key,
         &SellOrder {
             id: id.clone(),
-            price: state.price,
+            price,
             ts: env.block.time,
             seller: info.sender,
             amount: funds,
         },
     )?;
 
-    // TODO
-    // Execute matching algorithm here
-
-    Ok(Response::default())
+    // Create response and add ID to outgoing SC `wasm` event
+    let mut res = Response::new();
+    res.add_attribute("action", "orderbook.sell");
+    res.add_attribute("id", id);
+    Ok(res)
 }
 
 /// Query does nothing
