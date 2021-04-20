@@ -13,7 +13,6 @@ pub static SELL_KEY: &[u8] = b"sell";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
-    pub contract_admin: HumanAddr,
     pub sell_denom: String,
     pub buy_denom: String,
 }
@@ -25,7 +24,8 @@ pub struct BuyOrder {
     pub price: Uint128,
     pub ts: u64,
     pub buyer: HumanAddr,
-    pub amount: Coin,
+    pub send_amount: Coin, // The coin to send to the seller
+    pub recv_amount: Coin, // The coin to receive from the seller
 }
 
 /// Persisted sell when a real-time buy matches are not found.
@@ -35,7 +35,8 @@ pub struct SellOrder {
     pub price: Uint128,
     pub ts: u64,
     pub seller: HumanAddr,
-    pub amount: Coin,
+    pub send_amount: Coin, // The coin to send to the buyer
+    pub recv_amount: Coin, // The coin to receive from the buyer
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {

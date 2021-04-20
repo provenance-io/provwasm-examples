@@ -25,24 +25,82 @@ Buyer1
 
 ```bash
 provenanced keys add buyer1 --home build/node0 --keyring-backend test --testnet
+
+
+- name: buyer1
+  type: local
+  address: tp1kafgjq4kefv2f5lt85hvhqxcl460juxfxqz58k
+  pubkey: tppub1addwnpepqvrzxjxxteudpegj0kufk4vkga9get0vzphhdhwz2fe08wsneyz3y42weq7
+  mnemonic: ""
+  threshold: 0
+  pubkeys: []
+
+
+**Important** write this mnemonic phrase in a safe place.
+It is the only way to recover your account if you ever forget your password.
+
+orphan match iron roast toss rhythm divert silk festival enlist school tent grant save boring type pretty setup monitor midnight cereal spoil jungle width
+
 ```
 
 Buyer2
 
 ```bash
 provenanced keys add buyer2 --home build/node0 --keyring-backend test --testnet
+
+- name: buyer2
+  type: local
+  address: tp1d8efdneqc5yw3xu6mmjduq7z75k3v4nz7x9jgx
+  pubkey: tppub1addwnpepqvxk3amumtqjus7kwkg2nyajr05z5duzrq3u9q3d9s085v8yecl5v7d7xz2
+  mnemonic: ""
+  threshold: 0
+  pubkeys: []
+
+
+**Important** write this mnemonic phrase in a safe place.
+It is the only way to recover your account if you ever forget your password.
+
+away icon useless girl matrix heart stone vehicle spoil never minor stock ethics space above jar law attitude youth plug identify coyote rebel merit
 ```
 
 Seller1
 
 ```bash
 provenanced keys add seller1 --home build/node0 --keyring-backend test --testnet
+
+- name: seller1
+  type: local
+  address: tp1uhcvjyr437ur24yhtv228yrurt9zsthpv40gs6
+  pubkey: tppub1addwnpepqt0n5n5cmskxhps2fj6tquaju7s5nffawfe8jfq9z3rf277ztlk628thpjr
+  mnemonic: ""
+  threshold: 0
+  pubkeys: []
+
+
+**Important** write this mnemonic phrase in a safe place.
+It is the only way to recover your account if you ever forget your password.
+
+guitar million cloud flee lyrics property where course clean curious quality swing exist toilet equal scan cup garbage economy moral basic eternal baby gift
 ```
 
 Seller2
 
 ```bash
 provenanced keys add seller2 --home build/node0 --keyring-backend test --testnet
+
+- name: seller2
+  type: local
+  address: tp1n0apzz2k9fda3hzlqqmu70kkkfcgc5sqqhe777
+  pubkey: tppub1addwnpepq2cvkg4dgt0fxh2u345qu3u4emr9jne3hxsh0h79kdf39ekt0s05yuxfvf6
+  mnemonic: ""
+  threshold: 0
+  pubkeys: []
+
+
+**Important** write this mnemonic phrase in a safe place.
+It is the only way to recover your account if you ever forget your password.
+
+mammal trip dentist account glory monster picnic give rate wear stool jump bubble trial virtual marine vintage cattle drink congress sting device click sing
 ```
 
 ## Funding Sellers
@@ -234,12 +292,12 @@ provenanced tx wasm store orderbook.wasm \
 ```
 
 Instantiate the contract, setting stablecoin denom required for buys in addition to the price per
-hash - for simplicity, we say that `1stablecoin5201` is the price for `100000000nhash`.
+hash - for simplicity, we'll just say that `1stablecoin5201` is the price for `1000000000nhash`.
 
 ```bash
 provenanced tx wasm instantiate 1 '{"buy_denom":"stablecoin5201"}' \
     --admin $(provenanced keys show -a node0 --keyring-backend test --home build/node0 --testnet) \
-    --label orderbook_v1 \
+    --label nhash_orderbook_v1 \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \
@@ -327,12 +385,12 @@ provenanced tx wasm execute \
     --testnet | jq
 ```
 
-Buy 10 hash
+Buy 5 hash for a higher price (should push this to the front of the order book).
 
 ```bash
 provenanced tx wasm execute \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"buy":{"id":"buy-3","price":"1"}}' \
+    '{"buy":{"id":"buy-3","price":"2"}}' \
     --amount 10stablecoin5201 \
     --from buyer1 \
     --keyring-backend test \
@@ -345,9 +403,9 @@ provenanced tx wasm execute \
     --testnet | jq
 ```
 
-## Query orderbook
+## Query the Order Book
 
-Query buy orders in price-time sorted priority.
+Query buy orders sorted by price-time priority.
 
 ```bash
 provenanced q wasm contract-state smart \
@@ -356,7 +414,7 @@ provenanced q wasm contract-state smart \
     --testnet -o json | jq
 ```
 
-Query sell orders in price-time sorted priority.
+Query sell orders sorted by price-time priority.
 
 ```bash
 provenanced q wasm contract-state smart \
@@ -365,6 +423,13 @@ provenanced q wasm contract-state smart \
     --testnet -o json | jq
 ```
 
-## Run match action
+## Run a Match Step
 
-TODO
+TODO: Run one step in the matching algorithm...
+
+- Pull first sell order
+- Iterator over buys with price >= sell price
+- Transfer coins
+- Update sell/buy state
+
+This will tell us the fees required to match one sell.

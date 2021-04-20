@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    to_binary, Deps, DepsMut, Env, MessageInfo, Order, QueryResponse, Response, StdResult, Uint128,
-    KV,
+    coin, to_binary, Decimal, Deps, DepsMut, Env, MessageInfo, Order, QueryResponse, Response,
+    StdResult, Uint128, KV,
 };
 
 use crate::error::ContractError;
@@ -14,12 +14,11 @@ use crate::state::{
 pub fn instantiate(
     deps: DepsMut,
     _env: Env,
-    info: MessageInfo,
+    _info: MessageInfo,
     msg: InitMsg,
 ) -> Result<Response, ContractError> {
     // Create and store config state.
     let state = State {
-        contract_admin: info.sender,
         sell_denom: "nhash".into(), // Force nano-hash
         buy_denom: msg.buy_denom,
     };
@@ -82,6 +81,12 @@ fn try_buy(
         });
     }
 
+    // :maths: - stablecoin sent * (1000000000 nhash / price stablecoins) = nhash received
+    // Just assume no rounding issues for now.
+    // TODO: use/enforce `price_precision` and `quantity_increment` here?
+    let amt = funds.amount * Decimal::from_ratio(1000000000u128, price.u128());
+    let recv_amount = coin(amt.u128(), "nhash");
+
     // Ensure an order with the given ID doesn't already exist.
     let order_key = id.as_bytes();
     let mut book = buy_orders(deps.storage);
@@ -97,7 +102,8 @@ fn try_buy(
             price,
             ts: env.block.time,
             buyer: info.sender,
-            amount: funds,
+            send_amount: funds, // Send this amount to seller(s)
+            recv_amount,        // Receive this amount from seller(s)
         },
     )?;
 
@@ -151,6 +157,12 @@ fn try_sell(
         });
     }
 
+    // :maths: - nhash sent * (price stablecoins / 1000000000 nhash) = stablecoins received
+    // Just assume no rounding issues for now.
+    // TODO: use/enforce `price_precision` and `quantity_increment` here?
+    let amt = funds.amount * Decimal::from_ratio(price.u128(), 1000000000u128);
+    let recv_amount = coin(amt.u128(), state.buy_denom);
+
     // Ensure an order with the given ID doesn't already exist.
     let order_key = id.as_bytes();
     let mut sell_book = sell_orders(deps.storage);
@@ -166,7 +178,8 @@ fn try_sell(
             price,
             ts: env.block.time,
             seller: info.sender,
-            amount: funds,
+            send_amount: funds, // Send this to buyer(s)
+            recv_amount,        // Receive this from buyer(s)
         },
     )?;
 
