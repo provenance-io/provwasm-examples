@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     coin, to_binary, Decimal, Deps, DepsMut, Env, MessageInfo, Order, QueryResponse, Response,
-    StdResult, Uint128, KV,
+    StdResult, Uint128,
 };
 
 use crate::error::ContractError;
@@ -200,46 +200,74 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<QueryResponse, Cont
 
 // Read all buy orders into memory, sort by amount/ts, then serialize to JSON.
 fn try_get_buy_orders(deps: Deps) -> Result<QueryResponse, ContractError> {
-    // Read all orders
-    let res: StdResult<Vec<KV<BuyOrder>>> = buy_orders_read(deps.storage)
-        .range(None, None, Order::Ascending)
-        .collect();
-    let mut buy_orders: Vec<BuyOrder> = res?.into_iter().map(|(_, v)| v).collect();
-
-    // Sort by price, then time.
-    buy_orders.sort_by(|a, b| {
-        if a.price != b.price {
-            b.price.cmp(&a.price)
-        } else {
-            a.ts.cmp(&b.ts)
-        }
-    });
-
+    // Query sorted buy orders, checking for errors
+    let buy_orders = get_buy_orders(deps)?;
     // Serialize and return
     let bin = to_binary(&BuyOrders { buy_orders })?;
     Ok(bin)
 }
 
-// Read all sell orders into memory, sort by amount/ts, then serialize to JSON.
-fn try_get_sell_orders(deps: Deps) -> Result<QueryResponse, ContractError> {
-    // Read all orders
-    let res: StdResult<Vec<KV<SellOrder>>> = sell_orders_read(deps.storage)
+// Read all buy orders into memory then sort by price, timestamp.
+fn get_buy_orders(deps: Deps) -> Result<Vec<BuyOrder>, ContractError> {
+    // Read all buy orders
+    let buy_orders: StdResult<Vec<_>> = buy_orders_read(deps.storage)
         .range(None, None, Order::Ascending)
+        .map(|item| {
+            let (_, buy_order) = item?;
+            Ok(buy_order)
+        })
         .collect();
-    let mut sell_orders: Vec<SellOrder> = res?.into_iter().map(|(_, v)| v).collect();
+
+    // Check for error
+    let mut buy_orders = buy_orders?;
 
     // Sort by price, then time.
-    sell_orders.sort_by(|a, b| {
+    buy_orders.sort_by(|a, b| {
         if a.price != b.price {
-            b.price.cmp(&a.price)
+            b.price.cmp(&a.price) // flip comparison for best price first
         } else {
             a.ts.cmp(&b.ts)
         }
     });
 
+    // Return sorted in price-time order
+    Ok(buy_orders)
+}
+
+// Read all sell orders into memory, sort by amount/ts, then serialize to JSON.
+fn try_get_sell_orders(deps: Deps) -> Result<QueryResponse, ContractError> {
+    // Query sorted sell orders, checking for errors
+    let sell_orders = get_sell_orders(deps)?;
     // Serialize and return
     let bin = to_binary(&SellOrders { sell_orders })?;
     Ok(bin)
+}
+
+// Read all sell orders into memory then sort by price, timestamp.
+fn get_sell_orders(deps: Deps) -> Result<Vec<SellOrder>, ContractError> {
+    // Read all sell orders
+    let sell_orders: StdResult<Vec<_>> = sell_orders_read(deps.storage)
+        .range(None, None, Order::Ascending)
+        .map(|item| {
+            let (_, sell_order) = item?;
+            Ok(sell_order)
+        })
+        .collect();
+
+    // Check for error
+    let mut sell_orders = sell_orders?;
+
+    // Sort by price, then time.
+    sell_orders.sort_by(|a, b| {
+        if a.price != b.price {
+            b.price.cmp(&a.price) // flip comparison for best price first
+        } else {
+            a.ts.cmp(&b.ts)
+        }
+    });
+
+    // Return sorted in price-time order
+    Ok(sell_orders)
 }
 
 #[cfg(test)]

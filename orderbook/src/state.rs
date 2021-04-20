@@ -56,9 +56,9 @@ pub fn buy_orders_read(storage: &dyn Storage) -> ReadonlyBucket<BuyOrder> {
 }
 
 pub fn sell_orders(storage: &mut dyn Storage) -> Bucket<SellOrder> {
-    bucket(storage, BUY_KEY)
+    bucket(storage, SELL_KEY)
 }
 
 pub fn sell_orders_read(storage: &dyn Storage) -> ReadonlyBucket<SellOrder> {
-    bucket_read(storage, BUY_KEY)
+    bucket_read(storage, SELL_KEY)
 }

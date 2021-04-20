@@ -38,4 +38,4 @@ optimize:
 
 .PHONY: install
 install: optimize
-	@cp artifacts/tutorial.wasm $(PROVWASM_INSTALL_DIR)
+	@cp artifacts/orderbook.wasm $(PROVWASM_INSTALL_DIR)

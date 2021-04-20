@@ -11,7 +11,7 @@ pub struct InitMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    Buy { id: String, price: Uint128 },  // Number of stablecoins offered for 1 hash
+    Buy { id: String, price: Uint128 }, // Number of stablecoins offered for 1 hash
     Sell { id: String, price: Uint128 }, // Number of stablecoins requested for 1 hash
 }
 

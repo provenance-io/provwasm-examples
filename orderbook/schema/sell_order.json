@@ -4,24 +4,28 @@
   "description": "Persisted sell when a real-time buy matches are not found.",
   "type": "object",
   "required": [
-    "amount",
     "id",
     "price",
+    "recv_amount",
     "seller",
+    "send_amount",
     "ts"
   ],
   "properties": {
-    "amount": {
-      "$ref": "#/definitions/Coin"
-    },
     "id": {
       "type": "string"
     },
     "price": {
       "$ref": "#/definitions/Uint128"
     },
+    "recv_amount": {
+      "$ref": "#/definitions/Coin"
+    },
     "seller": {
       "$ref": "#/definitions/HumanAddr"
+    },
+    "send_amount": {
+      "$ref": "#/definitions/Coin"
     },
     "ts": {
       "type": "integer",
