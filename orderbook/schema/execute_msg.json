@@ -47,6 +47,17 @@
           }
         }
       }
+    },
+    {
+      "type": "object",
+      "required": [
+        "step"
+      ],
+      "properties": {
+        "step": {
+          "type": "object"
+        }
+      }
     }
   ],
   "definitions": {

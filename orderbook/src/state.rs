@@ -1,4 +1,4 @@
-use cosmwasm_std::{Coin, HumanAddr, Uint128};
+use cosmwasm_std::{HumanAddr, Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -24,8 +24,8 @@ pub struct BuyOrder {
     pub price: Uint128,
     pub ts: u64,
     pub buyer: HumanAddr,
-    pub send_amount: Coin, // The coin to send to the seller
-    pub recv_amount: Coin, // The coin to receive from the seller
+    pub funds: Uint128,       // The stablecoin available for transfer
+    pub outstanding: Uint128, // The outstanding proceeds for the buy
 }
 
 /// Persisted sell when a real-time buy matches are not found.
@@ -35,8 +35,8 @@ pub struct SellOrder {
     pub price: Uint128,
     pub ts: u64,
     pub seller: HumanAddr,
-    pub send_amount: Coin, // The coin to send to the buyer
-    pub recv_amount: Coin, // The coin to receive from the buyer
+    pub funds: Uint128,       // The nhash available for transfer
+    pub outstanding: Uint128, // The outstanding proceeds for the sell
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {

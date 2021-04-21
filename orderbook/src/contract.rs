@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, to_binary, Decimal, Deps, DepsMut, Env, MessageInfo, Order, QueryResponse, Response,
-    StdResult, Uint128,
+    to_binary, Decimal, Deps, DepsMut, Env, MessageInfo, Order, QueryResponse, Response, StdResult,
+    Uint128,
 };
 
 use crate::error::ContractError;
@@ -9,6 +9,8 @@ use crate::state::{
     buy_orders, buy_orders_read, config, config_read, sell_orders, sell_orders_read, BuyOrder,
     SellOrder, State,
 };
+
+use std::cmp::Ordering;
 
 /// Initialize and save config state.
 pub fn instantiate(
@@ -36,6 +38,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::Buy { id, price } => try_buy(deps, env, info, id, price),
         ExecuteMsg::Sell { id, price } => try_sell(deps, env, info, id, price),
+        ExecuteMsg::Step {} => try_step(deps, env, info),
     }
 }
 
@@ -81,18 +84,15 @@ fn try_buy(
         });
     }
 
-    // :maths: - stablecoin sent * (1000000000 nhash / price stablecoins) = nhash received
-    // Just assume no rounding issues for now.
-    // TODO: use/enforce `price_precision` and `quantity_increment` here?
-    let amt = funds.amount * Decimal::from_ratio(1000000000u128, price.u128());
-    let recv_amount = coin(amt.u128(), "nhash");
-
     // Ensure an order with the given ID doesn't already exist.
     let order_key = id.as_bytes();
     let mut book = buy_orders(deps.storage);
     if book.may_load(&order_key)?.is_some() {
         return Err(ContractError::DuplicateBuy { id: id.clone() });
     }
+
+    // Just assume no rounding issues for now.
+    let outstanding = funds.amount * Decimal::from_ratio(1000000000u128, price.u128());
 
     // Persist buy order
     book.save(
@@ -102,8 +102,8 @@ fn try_buy(
             price,
             ts: env.block.time,
             buyer: info.sender,
-            send_amount: funds, // Send this amount to seller(s)
-            recv_amount,        // Receive this amount from seller(s)
+            funds: funds.amount,
+            outstanding,
         },
     )?;
 
@@ -157,18 +157,15 @@ fn try_sell(
         });
     }
 
-    // :maths: - nhash sent * (price stablecoins / 1000000000 nhash) = stablecoins received
-    // Just assume no rounding issues for now.
-    // TODO: use/enforce `price_precision` and `quantity_increment` here?
-    let amt = funds.amount * Decimal::from_ratio(price.u128(), 1000000000u128);
-    let recv_amount = coin(amt.u128(), state.buy_denom);
-
     // Ensure an order with the given ID doesn't already exist.
     let order_key = id.as_bytes();
     let mut sell_book = sell_orders(deps.storage);
     if sell_book.may_load(&order_key)?.is_some() {
         return Err(ContractError::DuplicateSell { id: id.clone() });
     }
+
+    // Just assume no rounding issues for now.
+    let outstanding = funds.amount * Decimal::from_ratio(price.u128(), 1000000000u128);
 
     // Persist sell order
     sell_book.save(
@@ -178,8 +175,8 @@ fn try_sell(
             price,
             ts: env.block.time,
             seller: info.sender,
-            send_amount: funds, // Send this to buyer(s)
-            recv_amount,        // Receive this from buyer(s)
+            funds: funds.amount,
+            outstanding,
         },
     )?;
 
@@ -188,6 +185,109 @@ fn try_sell(
     res.add_attribute("action", "orderbook.sell");
     res.add_attribute("id", id);
     Ok(res)
+}
+
+fn try_step(deps: DepsMut, env: Env, _info: MessageInfo) -> Result<Response, ContractError> {
+    let mut res = Response::new();
+    let sells = get_sell_orders(deps.as_ref())?;
+    if !sells.is_empty() {
+        match_sell(&deps, &env, &mut res, &sells[0])?;
+    }
+    Ok(res)
+}
+
+fn match_sell(
+    deps: &DepsMut,
+    env: &Env,
+    res: &mut Response,
+    sell: &SellOrder,
+) -> Result<(), ContractError> {
+    // Look for buy orders with a price >= sell price.
+    let buys: Vec<BuyOrder> = get_buy_orders(deps.as_ref())?
+        .into_iter()
+        .filter(|buy| buy.price >= sell.price)
+        .collect();
+
+    // Match sell with any/all buy orders
+    if !buys.is_empty() {
+        for buy in buys {
+            match_orders(deps, env, res, &buy, sell)?
+        }
+    }
+
+    // Done
+    Ok(())
+}
+
+// Match a buy order with a sell order.
+fn match_orders(
+    deps: &DepsMut,
+    _env: &Env,
+    _res: &mut Response,
+    buy: &BuyOrder,
+    sell: &SellOrder,
+) -> Result<(), ContractError> {
+    // Process stablecoin transfer to seller
+    match sell.outstanding.cmp(&buy.funds) {
+        Ordering::Less => {
+            deps.api
+                .debug("partial match: sell.outstanding < buy.funds")
+            // Transfer sell.outstanding funds to seller
+            // Reduce buy.funds by sell.outstanding
+            // Set sell.outstanding to zero
+        }
+        Ordering::Greater => {
+            deps.api
+                .debug("partial match: sell.outstanding > buy.funds")
+            // Transfer buy.funds to seller
+            // Reduce sell.outstanding by buy.funds
+            // Set buy.funds to zero
+        }
+        Ordering::Equal => {
+            deps.api
+                .debug("direct match: sell.outstanding == buy.funds")
+            // Transfer buy.funds to seller
+            // Set sell.outstanding to zero
+            // Set buy.funds to zero
+        }
+    }
+
+    // Process nhash transfer to buyer
+    match buy.outstanding.cmp(&sell.funds) {
+        Ordering::Less => {
+            deps.api
+                .debug("partial match: buy.outstanding < sell.funds")
+            // Transfer buy.outstanding funds to buyer
+            // Reduce sell.funds by buy.outstanding
+            // Set buy.outstanding to zero
+        }
+        Ordering::Greater => {
+            deps.api
+                .debug("partial match: buy.outstanding > sell.funds")
+            // Transfer sell.funds to buyer
+            // Reduce buy.outstanding by sell.funds
+            // Set sell.funds to zero
+        }
+        Ordering::Equal => {
+            deps.api
+                .debug("direct match: buy.outstanding == sell.funds")
+            // Transfer sell.funds to buyer
+            // Set buy.outstanding to zero
+            // Set sell.funds to zero
+        }
+    }
+
+    if sell.outstanding.is_zero() && sell.funds.is_zero() {
+        // TODO:
+        deps.api.debug("close sell")
+    }
+
+    if buy.outstanding.is_zero() && buy.funds.is_zero() {
+        // TODO:
+        deps.api.debug("close buy")
+    }
+
+    todo!()
 }
 
 /// Query does nothing

@@ -3,7 +3,7 @@
 This is an example order book that explores matching buys and sells on-chain.
 
 For simplicity, sell orders must be `nhash`. Buy order denom can be specified during instantiation,
-however, it must represent an unrestricted marker (ie some stablecoin).
+however, it must be backed by an unrestricted marker (ie some stablecoin).
 
 The matching algorithm used in this example is __Price-Time-Priority/FIFO__
 
@@ -403,7 +403,7 @@ provenanced tx wasm execute \
     --testnet | jq
 ```
 
-## Query the Order Book
+## Query the orderbook
 
 Query buy orders sorted by price-time priority.
 

@@ -5,27 +5,27 @@
   "type": "object",
   "required": [
     "buyer",
+    "funds",
     "id",
+    "outstanding",
     "price",
-    "recv_amount",
-    "send_amount",
     "ts"
   ],
   "properties": {
     "buyer": {
       "$ref": "#/definitions/HumanAddr"
     },
+    "funds": {
+      "$ref": "#/definitions/Uint128"
+    },
     "id": {
       "type": "string"
     },
-    "price": {
+    "outstanding": {
       "$ref": "#/definitions/Uint128"
     },
-    "recv_amount": {
-      "$ref": "#/definitions/Coin"
-    },
-    "send_amount": {
-      "$ref": "#/definitions/Coin"
+    "price": {
+      "$ref": "#/definitions/Uint128"
     },
     "ts": {
       "type": "integer",
@@ -34,21 +34,6 @@
     }
   },
   "definitions": {
-    "Coin": {
-      "type": "object",
-      "required": [
-        "amount",
-        "denom"
-      ],
-      "properties": {
-        "amount": {
-          "$ref": "#/definitions/Uint128"
-        },
-        "denom": {
-          "type": "string"
-        }
-      }
-    },
     "HumanAddr": {
       "type": "string"
     },
