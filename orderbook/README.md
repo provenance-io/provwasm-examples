@@ -311,7 +311,7 @@ provenanced tx wasm instantiate 1 '{"buy_denom":"stablecoin5201"}' \
 
 ## Place sell orders
 
-Sell 10 hash
+Sell 10 hash from seller1
 
 ```bash
 provenanced tx wasm execute \
@@ -329,13 +329,13 @@ provenanced tx wasm execute \
     --testnet | jq
 ```
 
-Sell 13 hash
+Sell 10 hash from seller 2
 
 ```bash
 provenanced tx wasm execute \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
     '{"sell":{"id":"sell-2","price":"1"}}' \
-    --amount 13000000000nhash \
+    --amount 10000000000nhash \
     --from seller2 \
     --keyring-backend test \
     --home build/node0 \
@@ -349,7 +349,7 @@ provenanced tx wasm execute \
 
 ## Place buy orders
 
-Buy 5 hash
+Buy 5 hash from buyer1
 
 ```bash
 provenanced tx wasm execute \
@@ -367,7 +367,7 @@ provenanced tx wasm execute \
     --testnet | jq
 ```
 
-Buy 5 hash
+Buy 5 hash from buyer 2
 
 ```bash
 provenanced tx wasm execute \
@@ -385,7 +385,7 @@ provenanced tx wasm execute \
     --testnet | jq
 ```
 
-Buy 5 hash for a higher price (should push this to the front of the order book).
+Buy 5 hash from buyer1 for a higher price (should push this to the front of the order book).
 
 ```bash
 provenanced tx wasm execute \
@@ -405,15 +405,6 @@ provenanced tx wasm execute \
 
 ## Query the orderbook
 
-Query buy orders sorted by price-time priority.
-
-```bash
-provenanced q wasm contract-state smart \
-    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_buy_orders":{}}' \
-    --testnet -o json | jq
-```
-
 Query sell orders sorted by price-time priority.
 
 ```bash
@@ -423,13 +414,30 @@ provenanced q wasm contract-state smart \
     --testnet -o json | jq
 ```
 
+Query buy orders sorted by price-time priority.
+
+```bash
+provenanced q wasm contract-state smart \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"get_buy_orders":{}}' \
+    --testnet -o json | jq
+```
+
 ## Run a Match Step
 
-TODO: Run one step in the matching algorithm...
+Run one step in the matching algorithm...
 
-- Pull first sell order
-- Iterator over buys with price >= sell price
-- Transfer coins
-- Update sell/buy state
-
-This will tell us the fees required to match one sell.
+```bash
+provenanced tx wasm execute \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"step":{}}' \
+    --from node0 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet | jq
+```
