@@ -17,4 +17,10 @@ pub enum ContractError {
 
     #[error("InvalidFunds: {message:?}")]
     InvalidFunds { message: String },
+
+    #[error("SellClosed")]
+    SellClosed {},
+
+    #[error("BuyAlreadyClosed")]
+    BuyClosed {},
 }

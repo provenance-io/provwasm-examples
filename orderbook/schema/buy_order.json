@@ -5,6 +5,7 @@
   "type": "object",
   "required": [
     "buyer",
+    "denom",
     "funds",
     "id",
     "outstanding",
@@ -14,6 +15,9 @@
   "properties": {
     "buyer": {
       "$ref": "#/definitions/HumanAddr"
+    },
+    "denom": {
+      "type": "string"
     },
     "funds": {
       "$ref": "#/definitions/Uint128"

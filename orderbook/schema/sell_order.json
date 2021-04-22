@@ -4,6 +4,7 @@
   "description": "Persisted sell when a real-time buy matches are not found.",
   "type": "object",
   "required": [
+    "denom",
     "funds",
     "id",
     "outstanding",
@@ -12,6 +13,9 @@
     "ts"
   ],
   "properties": {
+    "denom": {
+      "type": "string"
+    },
     "funds": {
       "$ref": "#/definitions/Uint128"
     },

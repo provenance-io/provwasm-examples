@@ -26,6 +26,13 @@ pub struct BuyOrder {
     pub buyer: HumanAddr,
     pub funds: Uint128,       // The stablecoin available for transfer
     pub outstanding: Uint128, // The outstanding proceeds for the buy
+    pub denom: String,
+}
+
+impl BuyOrder {
+    pub fn is_closed(&self) -> bool {
+        self.outstanding.is_zero() && self.funds.is_zero()
+    }
 }
 
 /// Persisted sell when a real-time buy matches are not found.
@@ -37,6 +44,13 @@ pub struct SellOrder {
     pub seller: HumanAddr,
     pub funds: Uint128,       // The nhash available for transfer
     pub outstanding: Uint128, // The outstanding proceeds for the sell
+    pub denom: String,
+}
+
+impl SellOrder {
+    pub fn is_closed(&self) -> bool {
+        self.outstanding.is_zero() && self.funds.is_zero()
+    }
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {

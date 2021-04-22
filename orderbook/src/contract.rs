@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    to_binary, Decimal, Deps, DepsMut, Env, MessageInfo, Order, QueryResponse, Response, StdResult,
-    Uint128,
+    coin, to_binary, BankMsg, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Order,
+    QueryResponse, Response, StdResult, Storage, Uint128,
 };
 
 use crate::error::ContractError;
@@ -38,7 +38,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::Buy { id, price } => try_buy(deps, env, info, id, price),
         ExecuteMsg::Sell { id, price } => try_sell(deps, env, info, id, price),
-        ExecuteMsg::Step {} => try_step(deps, env, info),
+        ExecuteMsg::Step {} => try_step(deps),
     }
 }
 
@@ -94,6 +94,13 @@ fn try_buy(
     // Just assume no rounding issues for now.
     let outstanding = funds.amount * Decimal::from_ratio(1000000000u128, price.u128());
 
+    // Validate that buy proceeds are in 1hash increments.
+    if outstanding.u128() % 1000000000u128 != 0u128 {
+        return Err(ContractError::InvalidFunds {
+            message: "funds must yield a buy amount in 1hash increments".into(),
+        });
+    }
+
     // Persist buy order
     book.save(
         &order_key,
@@ -104,6 +111,7 @@ fn try_buy(
             buyer: info.sender,
             funds: funds.amount,
             outstanding,
+            denom: state.buy_denom,
         },
     )?;
 
@@ -139,11 +147,11 @@ fn try_sell(
     // Load config state
     let state = config_read(deps.storage).load()?;
 
-    // Ensure the funds are valid (ie at least 1 hash was sent)
-    if funds.amount < Uint128(1000000000) {
+    // Ensure the funds are valid (ie at least 1 hash in 1hash increments)
+    if funds.amount.is_zero() || funds.amount.u128() % 1000000000u128 != 0 {
         return Err(ContractError::InvalidFunds {
             message: format!(
-                "sell amount must be >= 1000000000nhash: got {}",
+                "sell amount must be > 0 in 1000000000nhash increments: got {}",
                 funds.amount
             ),
         });
@@ -177,6 +185,7 @@ fn try_sell(
             seller: info.sender,
             funds: funds.amount,
             outstanding,
+            denom: state.sell_denom,
         },
     )?;
 
@@ -187,21 +196,21 @@ fn try_sell(
     Ok(res)
 }
 
-fn try_step(deps: DepsMut, env: Env, _info: MessageInfo) -> Result<Response, ContractError> {
+// Execute a single step of the match algorithm: process a single sell.
+fn try_step(deps: DepsMut) -> Result<Response, ContractError> {
     let mut res = Response::new();
     let sells = get_sell_orders(deps.as_ref())?;
     if !sells.is_empty() {
-        match_sell(&deps, &env, &mut res, &sells[0])?;
+        match_sell(deps, &mut res, sells[0].clone())?;
     }
     Ok(res)
 }
 
-fn match_sell(
-    deps: &DepsMut,
-    env: &Env,
-    res: &mut Response,
-    sell: &SellOrder,
-) -> Result<(), ContractError> {
+// Look for and match with buy orders for a given sell order.
+fn match_sell(deps: DepsMut, res: &mut Response, sell: SellOrder) -> Result<(), ContractError> {
+    // Create an updatable sell order
+    let mut sell = sell;
+
     // Look for buy orders with a price >= sell price.
     let buys: Vec<BuyOrder> = get_buy_orders(deps.as_ref())?
         .into_iter()
@@ -209,85 +218,172 @@ fn match_sell(
         .collect();
 
     // Match sell with any/all buy orders
-    if !buys.is_empty() {
-        for buy in buys {
-            match_orders(deps, env, res, &buy, sell)?
+    for buy in buys {
+        // Execute match
+        let match_res = match_orders(buy, sell.clone())?;
+
+        // Add sends to outgoing response
+        for msg in match_res.msgs {
+            res.add_message(msg);
+        }
+
+        // Add a match event attribute to outgoing response
+        res.add_attribute(
+            "match",
+            format!("buy:{},sell:{}", match_res.buy.id, match_res.sell.id),
+        );
+
+        // Update sell for the next iteration
+        sell = match_res.sell.clone();
+
+        // Persist sell order state
+        update_sell_order(deps.storage, match_res.sell)?;
+
+        // Persist buy order state
+        update_buy_order(deps.storage, match_res.buy)?;
+
+        // Nothing more we can do for this sell
+        if sell.is_closed() {
+            break;
         }
     }
-
-    // Done
     Ok(())
 }
 
+// The return type for matching orders
+struct MatchResult {
+    pub buy: BuyOrder,
+    pub sell: SellOrder,
+    pub msgs: Vec<CosmosMsg>,
+}
+
 // Match a buy order with a sell order.
-fn match_orders(
-    deps: &DepsMut,
-    _env: &Env,
-    _res: &mut Response,
-    buy: &BuyOrder,
-    sell: &SellOrder,
-) -> Result<(), ContractError> {
+fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractError> {
+    // Validate orders are still open
+    if buy.is_closed() {
+        return Err(ContractError::BuyClosed {});
+    }
+    if sell.is_closed() {
+        return Err(ContractError::SellClosed {});
+    }
+
+    // Make sell and buy updatable
+    let mut sell = sell;
+    let mut buy = buy;
+
+    // Tracks bank sends required for matching
+    let mut msgs: Vec<CosmosMsg> = Vec::new();
+
     // Process stablecoin transfer to seller
     match sell.outstanding.cmp(&buy.funds) {
         Ordering::Less => {
-            deps.api
-                .debug("partial match: sell.outstanding < buy.funds")
             // Transfer sell.outstanding funds to seller
+            let amt = coin(sell.outstanding.u128(), buy.denom.clone());
+            msgs.push(
+                BankMsg::Send {
+                    amount: vec![amt],
+                    to_address: sell.seller.clone(),
+                }
+                .into(),
+            );
             // Reduce buy.funds by sell.outstanding
+            buy.funds = (buy.funds - sell.outstanding)?;
             // Set sell.outstanding to zero
+            sell.outstanding = Uint128::zero();
         }
-        Ordering::Greater => {
-            deps.api
-                .debug("partial match: sell.outstanding > buy.funds")
+        _ => {
             // Transfer buy.funds to seller
+            let amt = coin(buy.funds.u128(), buy.denom.clone());
+            msgs.push(
+                BankMsg::Send {
+                    amount: vec![amt],
+                    to_address: sell.seller.clone(),
+                }
+                .into(),
+            );
             // Reduce sell.outstanding by buy.funds
+            sell.outstanding = (sell.outstanding - buy.funds)?;
             // Set buy.funds to zero
-        }
-        Ordering::Equal => {
-            deps.api
-                .debug("direct match: sell.outstanding == buy.funds")
-            // Transfer buy.funds to seller
-            // Set sell.outstanding to zero
-            // Set buy.funds to zero
+            buy.funds = Uint128::zero();
         }
     }
 
     // Process nhash transfer to buyer
     match buy.outstanding.cmp(&sell.funds) {
         Ordering::Less => {
-            deps.api
-                .debug("partial match: buy.outstanding < sell.funds")
             // Transfer buy.outstanding funds to buyer
+            let amt = coin(buy.outstanding.u128(), sell.denom.clone());
+            msgs.push(
+                BankMsg::Send {
+                    amount: vec![amt],
+                    to_address: buy.buyer.clone(),
+                }
+                .into(),
+            );
             // Reduce sell.funds by buy.outstanding
+            sell.funds = (sell.funds - buy.outstanding)?;
             // Set buy.outstanding to zero
+            buy.outstanding = Uint128::zero();
         }
-        Ordering::Greater => {
-            deps.api
-                .debug("partial match: buy.outstanding > sell.funds")
+        _ => {
             // Transfer sell.funds to buyer
+            let amt = coin(sell.funds.u128(), sell.denom.clone());
+            msgs.push(
+                BankMsg::Send {
+                    amount: vec![amt],
+                    to_address: buy.buyer.clone(),
+                }
+                .into(),
+            );
             // Reduce buy.outstanding by sell.funds
+            buy.outstanding = (buy.outstanding - sell.funds)?;
             // Set sell.funds to zero
-        }
-        Ordering::Equal => {
-            deps.api
-                .debug("direct match: buy.outstanding == sell.funds")
-            // Transfer sell.funds to buyer
-            // Set buy.outstanding to zero
-            // Set sell.funds to zero
+            sell.funds = Uint128::zero();
         }
     }
 
-    if sell.outstanding.is_zero() && sell.funds.is_zero() {
-        // TODO:
-        deps.api.debug("close sell")
+    // If the sell ask amount was met but not all funds were required, refund them.
+    if sell.outstanding.is_zero() && !sell.funds.is_zero() {
+        let amt = coin(sell.funds.u128(), sell.denom.clone());
+        msgs.push(
+            BankMsg::Send {
+                amount: vec![amt],
+                to_address: sell.seller.clone(),
+            }
+            .into(),
+        );
+        sell.funds = Uint128::zero();
     }
 
-    if buy.outstanding.is_zero() && buy.funds.is_zero() {
-        // TODO:
-        deps.api.debug("close buy")
-    }
+    Ok(MatchResult { buy, sell, msgs })
+}
 
-    todo!()
+// Update a sell order in order book storage.
+fn update_sell_order(storage: &mut dyn Storage, order: SellOrder) -> Result<(), ContractError> {
+    // Ensure an order with the given ID doesn't already exist.
+    let key = order.id.as_bytes();
+    let mut book = sell_orders(storage);
+    // Persist sell order
+    if order.is_closed() {
+        book.remove(&key);
+    } else {
+        book.save(&key, &order)?;
+    }
+    Ok(())
+}
+
+// Update a buy order in order book storage.
+fn update_buy_order(storage: &mut dyn Storage, order: BuyOrder) -> Result<(), ContractError> {
+    // Ensure an order with the given ID doesn't already exist.
+    let key = order.id.as_bytes();
+    let mut book = buy_orders(storage);
+    // Persist sell order
+    if order.is_closed() {
+        book.remove(&key);
+    } else {
+        book.save(&key, &order)?;
+    }
+    Ok(())
 }
 
 /// Query does nothing
@@ -378,6 +474,6 @@ mod tests {
 
     #[test]
     fn valid_init() {
-        todo!()
+        //todo!()
     }
 }

@@ -1,9 +1,9 @@
-# Order Book Matching Example
+# Hash Order Book Matching Example
 
 This is an example order book that explores matching buys and sells on-chain.
 
-For simplicity, sell orders must be `nhash`. Buy order denom can be specified during instantiation,
-however, it must be backed by an unrestricted marker (ie some stablecoin).
+For simplicity, sell orders must be `nhash` in increments of 1,000,000,000. Buy order denom can be
+specified during instantiation, but it must be backed by an unrestricted marker.
 
 The matching algorithm used in this example is __Price-Time-Priority/FIFO__
 
