@@ -51,10 +51,10 @@ fn try_add_trader(
     }
 
     // Query trader's stablecoin balance, ensuring it is non-zero.
-    let balance: Coin = deps.querier.query_balance(&address, &state.stablecoin)?;
-    if balance.amount.is_zero() {
-        return Err(ContractError::InsufficientFunds {});
-    }
+    // let balance: Coin = deps.querier.query_balance(&address, &state.stablecoin)?;
+    // if balance.amount.is_zero() {
+    //     return Err(ContractError::InsufficientFunds {});
+    // }
 
     // Load trader config bucket
     let mut bucket = trader_bucket(deps.storage);
@@ -65,7 +65,7 @@ fn try_add_trader(
         bucket.save(
             &trader_key,
             &TraderState {
-                loan_cap: Uint128(9 * balance.amount.u128()),
+                loan_cap: Uint128(10000000000_u128),
                 loans: Uint128::zero(),
             },
         )?;
@@ -371,7 +371,7 @@ mod tests {
     fn add_trader() {
         // Create standard mocks.
         let mut deps = mock_dependencies(&[]);
-        let stablecoins = coin(100, "stablecoin");
+        let stablecoins = coin(0, "stablecoin");
         deps.querier
             .update_balance(HumanAddr::from("trader"), vec![stablecoins]);
 
@@ -414,9 +414,9 @@ mod tests {
             rep,
             TraderStateResponse {
                 security: Uint128::zero(),
-                stablecoin: Uint128(100),
+                stablecoin: Uint128::zero(),
                 loans: Uint128::zero(),
-                loan_cap: Uint128(900),
+                loan_cap: Uint128(10000000000_u128),
             }
         );
     }
