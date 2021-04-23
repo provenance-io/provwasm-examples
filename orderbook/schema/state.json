@@ -4,13 +4,22 @@
   "type": "object",
   "required": [
     "buy_denom",
+    "contract_admin",
     "sell_denom"
   ],
   "properties": {
     "buy_denom": {
       "type": "string"
     },
+    "contract_admin": {
+      "$ref": "#/definitions/HumanAddr"
+    },
     "sell_denom": {
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "HumanAddr": {
       "type": "string"
     }
   }

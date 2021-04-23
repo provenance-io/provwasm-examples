@@ -105,7 +105,7 @@ mammal trip dentist account glory monster picnic give rate wear stool jump bubbl
 
 ## Funding Sellers
 
-Fund the seller accounts with a bunch of `nhash`
+Fund the seller accounts with `nhash`
 
 ```bash
 provenanced tx bank send \
@@ -285,7 +285,7 @@ provenanced tx wasm store orderbook.wasm \
     --home build/node0 \
     --chain-id chain-local \
     --gas auto \
-    --fees 20000nhash \
+    --fees 10000nhash \
     --broadcast-mode block \
     --yes \
     --testnet | jq
@@ -297,13 +297,13 @@ hash - for simplicity, we'll just say that `1stablecoin5201` is the price for `1
 ```bash
 provenanced tx wasm instantiate 1 '{"buy_denom":"stablecoin5201"}' \
     --admin $(provenanced keys show -a node0 --keyring-backend test --home build/node0 --testnet) \
-    --label nhash_orderbook_v1 \
+    --label nhash_orderbook_poc_v1 \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \
     --chain-id chain-local \
     --gas auto \
-    --fees 2000nhash \
+    --fees 1000nhash \
     --broadcast-mode block \
     --yes \
     --testnet | jq
@@ -323,7 +323,7 @@ provenanced tx wasm execute \
     --home build/node0 \
     --chain-id chain-local \
     --gas auto \
-    --fees 2000nhash \
+    --fees 1000nhash \
     --broadcast-mode block \
     --yes \
     --testnet | jq
@@ -341,7 +341,7 @@ provenanced tx wasm execute \
     --home build/node0 \
     --chain-id chain-local \
     --gas auto \
-    --fees 2000nhash \
+    --fees 1000nhash \
     --broadcast-mode block \
     --yes \
     --testnet | jq
@@ -361,7 +361,7 @@ provenanced tx wasm execute \
     --home build/node0 \
     --chain-id chain-local \
     --gas auto \
-    --fees 2000nhash \
+    --fees 1000nhash \
     --broadcast-mode block \
     --yes \
     --testnet | jq
@@ -379,7 +379,7 @@ provenanced tx wasm execute \
     --home build/node0 \
     --chain-id chain-local \
     --gas auto \
-    --fees 2000nhash \
+    --fees 1000nhash \
     --broadcast-mode block \
     --yes \
     --testnet | jq
@@ -425,7 +425,7 @@ provenanced q wasm contract-state smart \
 
 ## Run a Match Step
 
-Run one step in the matching algorithm...
+Run one step in the matching algorithm
 
 ```bash
 provenanced tx wasm execute \
@@ -437,6 +437,42 @@ provenanced tx wasm execute \
     --chain-id chain-local \
     --gas auto \
     --fees 5000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet | jq
+```
+
+Sell 50 hash from seller1 at a high price
+
+```bash
+provenanced tx wasm execute \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"sell":{"id":"sell-3","price":"15"}}' \
+    --amount 50000000000nhash \
+    --from seller1 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 1000nhash \
+    --broadcast-mode block \
+    --yes \
+    --testnet | jq
+```
+
+Sell 50 hash from seller 2
+
+```bash
+provenanced tx wasm execute \
+    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
+    '{"sell":{"id":"sell-4","price":"1"}}' \
+    --amount 50000000000nhash \
+    --from seller2 \
+    --keyring-backend test \
+    --home build/node0 \
+    --chain-id chain-local \
+    --gas auto \
+    --fees 1000nhash \
     --broadcast-mode block \
     --yes \
     --testnet | jq

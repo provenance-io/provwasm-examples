@@ -15,6 +15,7 @@ pub static SELL_KEY: &[u8] = b"sell";
 pub struct State {
     pub sell_denom: String,
     pub buy_denom: String,
+    pub contract_admin: HumanAddr,
 }
 
 /// Persisted buy when a real-time sell match is not found.

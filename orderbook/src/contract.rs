@@ -16,13 +16,14 @@ use std::cmp::Ordering;
 pub fn instantiate(
     deps: DepsMut,
     _env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     msg: InitMsg,
 ) -> Result<Response, ContractError> {
     // Create and store config state.
     let state = State {
         sell_denom: "nhash".into(), // Force nano-hash
         buy_denom: msg.buy_denom,
+        contract_admin: info.sender,
     };
     config(deps.storage).save(&state)?;
     Ok(Response::default())
@@ -38,7 +39,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::Buy { id, price } => try_buy(deps, env, info, id, price),
         ExecuteMsg::Sell { id, price } => try_sell(deps, env, info, id, price),
-        ExecuteMsg::Step {} => try_step(deps),
+        ExecuteMsg::Step {} => try_step(deps, info, env),
     }
 }
 
@@ -82,6 +83,11 @@ fn try_buy(
                 funds.denom, state.buy_denom
             ),
         });
+    }
+
+    // Admin is not allowed buy hash, only execute the matching algorithm.
+    if info.sender == state.contract_admin {
+        return Err(ContractError::Unauthorized {});
     }
 
     // Ensure an order with the given ID doesn't already exist.
@@ -165,6 +171,11 @@ fn try_sell(
         });
     }
 
+    // Admin is not allowed sell hash, only execute the matching algorithm.
+    if info.sender == state.contract_admin {
+        return Err(ContractError::Unauthorized {});
+    }
+
     // Ensure an order with the given ID doesn't already exist.
     let order_key = id.as_bytes();
     let mut sell_book = sell_orders(deps.storage);
@@ -197,24 +208,48 @@ fn try_sell(
 }
 
 // Execute a single step of the match algorithm: process a single sell.
-fn try_step(deps: DepsMut) -> Result<Response, ContractError> {
-    let mut res = Response::new();
-    let sells = get_sell_orders(deps.as_ref())?;
-    if !sells.is_empty() {
-        match_sell(deps, &mut res, sells[0].clone())?;
+fn try_step(deps: DepsMut, info: MessageInfo, env: Env) -> Result<Response, ContractError> {
+    // Load config state
+    let state = config_read(deps.storage).load()?;
+
+    // Only the admin can execute matching.
+    if info.sender != state.contract_admin {
+        return Err(ContractError::Unauthorized {});
     }
+
+    // Create aggregate response and get the BFT time of the current block.
+    let mut res = Response::new();
+    let ts = env.block.time;
+
+    // Query and filter sell orders
+    let sells: Vec<SellOrder> = get_sell_orders(deps.as_ref())?
+        .into_iter()
+        .filter(|sell| sell.ts < ts) // Ignore sells in the current block
+        .collect();
+
+    // Execute a single matching step.
+    if !sells.is_empty() {
+        match_sell(deps, &mut res, sells[0].clone(), ts)?;
+    }
+
+    // Done
     Ok(res)
 }
 
 // Look for and match with buy orders for a given sell order.
-fn match_sell(deps: DepsMut, res: &mut Response, sell: SellOrder) -> Result<(), ContractError> {
+fn match_sell(
+    deps: DepsMut,
+    res: &mut Response,
+    sell: SellOrder,
+    ts: u64,
+) -> Result<(), ContractError> {
     // Create an updatable sell order
     let mut sell = sell;
 
-    // Look for buy orders with a price >= sell price.
+    // Look for buy orders with a price >= sell price, ignoring buys in the current block.
     let buys: Vec<BuyOrder> = get_buy_orders(deps.as_ref())?
         .into_iter()
-        .filter(|buy| buy.price >= sell.price)
+        .filter(|buy| buy.price >= sell.price && buy.ts < ts)
         .collect();
 
     // Match sell with any/all buy orders
@@ -344,10 +379,10 @@ fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractE
 
     // If the sell ask amount was met but not all funds were required, refund them.
     if sell.outstanding.is_zero() && !sell.funds.is_zero() {
-        let amt = coin(sell.funds.u128(), sell.denom.clone());
+        let refund = coin(sell.funds.u128(), sell.denom.clone());
         msgs.push(
             BankMsg::Send {
-                amount: vec![amt],
+                amount: vec![refund],
                 to_address: sell.seller.clone(),
             }
             .into(),

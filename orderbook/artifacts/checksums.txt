@@ -1,1 +1,1 @@
-ddc195e9ff582569f1c93dfa5359dbd5272ce761b35cf84a24e9ee6df266dc02  orderbook.wasm
+7fc2ed4d90d3f2b7591855d522fa3ea5906fe6ae515b42db3c7560f54aa9e9f3  orderbook.wasm
