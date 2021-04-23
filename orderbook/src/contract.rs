@@ -39,12 +39,11 @@ pub fn execute(
     match msg {
         ExecuteMsg::Buy { id, price } => try_buy(deps, env, info, id, price),
         ExecuteMsg::Sell { id, price } => try_sell(deps, env, info, id, price),
-        ExecuteMsg::Step {} => try_step(deps, info, env),
+        ExecuteMsg::Match {} => try_match(deps, info, env),
     }
 }
 
-// Look for a sell order that will satisfy a buy. If found, settle immediately. If not found,
-// persist the buy order for later matching.
+// Validate then persist a buy order for later matching.
 fn try_buy(
     deps: DepsMut,
     env: Env,
@@ -62,7 +61,7 @@ fn try_buy(
     // Ensure the correct funds where sent
     if info.funds.len() != 1 {
         return Err(ContractError::InvalidFunds {
-            message: "no buy funds provided".into(),
+            message: "invalid number of buy funds provided".into(),
         });
     }
     let funds = info.funds[0].clone();
@@ -128,6 +127,7 @@ fn try_buy(
     Ok(res)
 }
 
+// Validate then persist a sell order for later matching.
 fn try_sell(
     deps: DepsMut,
     env: Env,
@@ -145,7 +145,7 @@ fn try_sell(
     // Ensure the correct number of funds where sent.
     if info.funds.len() != 1 {
         return Err(ContractError::InvalidFunds {
-            message: "no sell funds provided".into(),
+            message: "invalid number of sell funds provided".into(),
         });
     }
     let funds = info.funds[0].clone();
@@ -207,8 +207,8 @@ fn try_sell(
     Ok(res)
 }
 
-// Execute a single step of the match algorithm: process a single sell.
-fn try_step(deps: DepsMut, info: MessageInfo, env: Env) -> Result<Response, ContractError> {
+// Execute the match algorithm.
+fn try_match(deps: DepsMut, info: MessageInfo, env: Env) -> Result<Response, ContractError> {
     // Load config state
     let state = config_read(deps.storage).load()?;
 
@@ -228,61 +228,48 @@ fn try_step(deps: DepsMut, info: MessageInfo, env: Env) -> Result<Response, Cont
         .collect();
 
     // Execute a single matching step.
-    if !sells.is_empty() {
-        match_sell(deps, &mut res, sells[0].clone(), ts)?;
+    for sell in sells {
+        // Create an updatable sell order
+        let mut sell = sell;
+
+        // Look for buy orders with a price >= sell price, ignoring buys in the current block.
+        let buys: Vec<BuyOrder> = get_buy_orders(deps.as_ref())?
+            .into_iter()
+            .filter(|buy| buy.price >= sell.price && buy.ts < ts)
+            .collect();
+
+        // Match sell with any/all buy orders
+        for buy in buys {
+            // Execute match
+            let match_res = match_orders(buy, sell.clone())?;
+
+            // Add bank sends to outgoing response
+            for msg in match_res.msgs {
+                res.add_message(msg);
+            }
+
+            // Add a match event attribute to outgoing response
+            res.add_attribute(
+                "match",
+                format!("buy:{},sell:{}", match_res.buy.id, match_res.sell.id),
+            );
+
+            // Update sell for the next iteration
+            sell = match_res.sell.clone();
+
+            // Persist order state
+            update_sell_order(deps.storage, match_res.sell)?;
+            update_buy_order(deps.storage, match_res.buy)?;
+
+            // Update sell for the next iteration and stop if sell is closed
+            if sell.is_closed() {
+                break;
+            }
+        }
     }
 
     // Done
     Ok(res)
-}
-
-// Look for and match with buy orders for a given sell order.
-fn match_sell(
-    deps: DepsMut,
-    res: &mut Response,
-    sell: SellOrder,
-    ts: u64,
-) -> Result<(), ContractError> {
-    // Create an updatable sell order
-    let mut sell = sell;
-
-    // Look for buy orders with a price >= sell price, ignoring buys in the current block.
-    let buys: Vec<BuyOrder> = get_buy_orders(deps.as_ref())?
-        .into_iter()
-        .filter(|buy| buy.price >= sell.price && buy.ts < ts)
-        .collect();
-
-    // Match sell with any/all buy orders
-    for buy in buys {
-        // Execute match
-        let match_res = match_orders(buy, sell.clone())?;
-
-        // Add sends to outgoing response
-        for msg in match_res.msgs {
-            res.add_message(msg);
-        }
-
-        // Add a match event attribute to outgoing response
-        res.add_attribute(
-            "match",
-            format!("buy:{},sell:{}", match_res.buy.id, match_res.sell.id),
-        );
-
-        // Update sell for the next iteration
-        sell = match_res.sell.clone();
-
-        // Persist sell order state
-        update_sell_order(deps.storage, match_res.sell)?;
-
-        // Persist buy order state
-        update_buy_order(deps.storage, match_res.buy)?;
-
-        // Nothing more we can do for this sell
-        if sell.is_closed() {
-            break;
-        }
-    }
-    Ok(())
 }
 
 // The return type for matching orders

@@ -51,10 +51,10 @@
     {
       "type": "object",
       "required": [
-        "step"
+        "match"
       ],
       "properties": {
-        "step": {
+        "match": {
           "type": "object"
         }
       }

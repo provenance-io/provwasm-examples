@@ -13,7 +13,7 @@ pub struct InitMsg {
 pub enum ExecuteMsg {
     Buy { id: String, price: Uint128 }, // Number of stablecoins offered for 1 hash
     Sell { id: String, price: Uint128 }, // Number of stablecoins requested for 1 hash
-    Step {},                            // Match 1 sell to >= 1 buys
+    Match {},                           // Match 1 sell to >= 1 buys
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
