@@ -7,6 +7,15 @@ specified during instantiation, but it must be backed by an unrestricted marker.
 
 The matching algorithm used in this example is __Price-Time-Priority/FIFO__
 
+NOTE: This is not truly a decentralized orderbook on blockchain - it requires a privileged account
+to run the matching algorithm (and pay fees). This admin account is prohibited from placing buy/sell
+orders. However, using an admin account does not prevent orderbook manipulation - the organization
+controlling the match executions could have a separate address used for placing buy/sell orders. In
+theory, they could "watch" the orderbook, then execute the match when their buy/sell account has
+orders in an optimal position. In order for this to be truly decentralized, there needs to be a
+begin/end block hook (or something similar) that executes matching - which is not currently
+available to CosmWasm contracts.
+
 ## Blockchain Setup
 
 Clear all current state, install the `provenanced` command, then start a 4-node localnet.
