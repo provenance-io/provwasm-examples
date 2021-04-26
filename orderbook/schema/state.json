@@ -5,7 +5,8 @@
   "required": [
     "buy_denom",
     "contract_admin",
-    "sell_denom"
+    "sell_denom",
+    "sell_increment"
   ],
   "properties": {
     "buy_denom": {
@@ -16,10 +17,16 @@
     },
     "sell_denom": {
       "type": "string"
+    },
+    "sell_increment": {
+      "$ref": "#/definitions/Uint128"
     }
   },
   "definitions": {
     "HumanAddr": {
+      "type": "string"
+    },
+    "Uint128": {
       "type": "string"
     }
   }

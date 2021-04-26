@@ -14,6 +14,7 @@ pub static SELL_KEY: &[u8] = b"sell";
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub sell_denom: String,
+    pub sell_increment: Uint128,
     pub buy_denom: String,
     pub contract_admin: HumanAddr,
 }

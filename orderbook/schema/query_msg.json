@@ -23,6 +23,17 @@
           "type": "object"
         }
       }
+    },
+    {
+      "type": "object",
+      "required": [
+        "get_orderbook"
+      ],
+      "properties": {
+        "get_orderbook": {
+          "type": "object"
+        }
+      }
     }
   ]
 }

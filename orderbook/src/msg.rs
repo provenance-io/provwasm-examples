@@ -21,6 +21,7 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     GetBuyOrders {},
     GetSellOrders {},
+    GetOrderbook {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -32,5 +33,12 @@ pub struct BuyOrders {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct SellOrders {
+    pub sell_orders: Vec<SellOrder>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct Orderbook {
+    pub buy_orders: Vec<BuyOrder>,
     pub sell_orders: Vec<SellOrder>,
 }

@@ -4,7 +4,7 @@ use cosmwasm_std::{
 };
 
 use crate::error::ContractError;
-use crate::msg::{BuyOrders, ExecuteMsg, InitMsg, QueryMsg, SellOrders};
+use crate::msg::{BuyOrders, ExecuteMsg, InitMsg, Orderbook, QueryMsg, SellOrders};
 use crate::state::{
     buy_orders, buy_orders_read, config, config_read, sell_orders, sell_orders_read, BuyOrder,
     SellOrder, State,
@@ -21,7 +21,8 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     // Create and store config state.
     let state = State {
-        sell_denom: "nhash".into(), // Force nano-hash
+        sell_denom: "nhash".into(),          // nano-hash
+        sell_increment: Uint128(1000000000), // 1 hash
         buy_denom: msg.buy_denom,
         contract_admin: info.sender,
     };
@@ -97,10 +98,10 @@ fn try_buy(
     }
 
     // Just assume no rounding issues for now.
-    let outstanding = funds.amount * Decimal::from_ratio(1000000000u128, price.u128());
+    let outstanding = funds.amount * Decimal::from_ratio(state.sell_increment.u128(), price.u128());
 
     // Validate that buy proceeds are in 1hash increments.
-    if outstanding.u128() % 1000000000u128 != 0u128 {
+    if outstanding.u128() % state.sell_increment.u128() != 0 {
         return Err(ContractError::InvalidFunds {
             message: "funds must yield a buy amount in 1hash increments".into(),
         });
@@ -154,11 +155,11 @@ fn try_sell(
     let state = config_read(deps.storage).load()?;
 
     // Ensure the funds are valid (ie at least 1 hash in 1hash increments)
-    if funds.amount.is_zero() || funds.amount.u128() % 1000000000u128 != 0 {
+    if funds.amount.is_zero() || funds.amount.u128() % state.sell_increment.u128() != 0 {
         return Err(ContractError::InvalidFunds {
             message: format!(
-                "sell amount must be > 0 in 1000000000nhash increments: got {}",
-                funds.amount
+                "sell amount must be > 0 in {} increments: got {}",
+                state.sell_increment, funds.amount
             ),
         });
     }
@@ -184,7 +185,7 @@ fn try_sell(
     }
 
     // Just assume no rounding issues for now.
-    let outstanding = funds.amount * Decimal::from_ratio(price.u128(), 1000000000u128);
+    let outstanding = funds.amount * Decimal::from_ratio(price.u128(), state.sell_increment.u128());
 
     // Persist sell order
     sell_book.save(
@@ -413,6 +414,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<QueryResponse, Cont
     match msg {
         QueryMsg::GetBuyOrders {} => try_get_buy_orders(deps),
         QueryMsg::GetSellOrders {} => try_get_sell_orders(deps),
+        QueryMsg::GetOrderbook {} => try_get_orderbook(deps),
     }
 }
 
@@ -488,14 +490,46 @@ fn get_sell_orders(deps: Deps) -> Result<Vec<SellOrder>, ContractError> {
     Ok(sell_orders)
 }
 
+// Read all sell orders into memory, sort by amount/ts, then serialize to JSON.
+fn try_get_orderbook(deps: Deps) -> Result<QueryResponse, ContractError> {
+    // Query sorted buy orders, checking for errors
+    let buy_orders = get_buy_orders(deps)?;
+    // Query sorted sell orders, checking for errors
+    let sell_orders = get_sell_orders(deps)?;
+    // Serialize and return
+    let bin = to_binary(&Orderbook {
+        buy_orders,
+        sell_orders,
+    })?;
+    Ok(bin)
+}
+
 #[cfg(test)]
 mod tests {
-    //use super::*;
-    //use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    //use cosmwasm_std::{coins, from_binary};
+    use super::*;
+    use cosmwasm_std::testing::{mock_env, mock_info};
+    use provwasm_mocks::mock_dependencies;
 
     #[test]
     fn valid_init() {
-        //todo!()
+        // Create standard mocks.
+        let mut deps = mock_dependencies(&[]);
+        let env = mock_env();
+        let info = mock_info("admin", &[]);
+
+        // Give the contract a name
+        let msg = InitMsg {
+            buy_denom: "stablecoin".into(),
+        };
+
+        // Ensure no messages were created.
+        let res = instantiate(deps.as_mut(), env, info, msg).unwrap();
+        assert_eq!(0, res.messages.len());
+
+        // Read state
+        let config_state = config_read(&deps.storage).load().unwrap();
+        assert_eq!(config_state.sell_denom, "nhash");
+        assert_eq!(config_state.sell_increment, Uint128(1000000000));
+        assert_eq!(config_state.buy_denom, "stablecoin");
     }
 }

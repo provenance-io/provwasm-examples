@@ -414,21 +414,12 @@ provenanced tx wasm execute \
 
 ## Query the orderbook
 
-Query sell orders sorted by price-time priority.
+Query buy and sell orders sorted by price-time priority.
 
 ```bash
 provenanced q wasm contract-state smart \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_sell_orders":{}}' \
-    --testnet -o json | jq
-```
-
-Query buy orders sorted by price-time priority.
-
-```bash
-provenanced q wasm contract-state smart \
-    tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
-    '{"get_buy_orders":{}}' \
+    '{"get_orderbook":{}}' \
     --testnet -o json | jq
 ```
 
@@ -449,4 +440,161 @@ provenanced tx wasm execute \
     --broadcast-mode block \
     --yes \
     --testnet | jq
+```
+
+Example output from match
+
+```json
+{
+  "height": "129",
+  "txhash": "3B905186CA5E66E4C9647727F0DB6C1ED31AA87BC447FF2C45F118BF0E1935D7",
+  "codespace": "",
+  "code": 0,
+  "data": "0A090A0765786563757465",
+  "raw_log": "<snip>",
+  "logs": [
+    {
+      "msg_index": 0,
+      "log": "",
+      "events": [
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "action",
+              "value": "execute"
+            },
+            {
+              "key": "module",
+              "value": "wasm"
+            },
+            {
+              "key": "signer",
+              "value": "tp1nxmnst765pkevx7g8h2msmlkrpq25qtqluxatr"
+            },
+            {
+              "key": "contract_address",
+              "value": "tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz"
+            }
+          ]
+        },
+        {
+          "type": "transfer",
+          "attributes": [
+            {
+              "key": "recipient",
+              "value": "tp1uhcvjyr437ur24yhtv228yrurt9zsthpv40gs6"
+            },
+            {
+              "key": "sender",
+              "value": "tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz"
+            },
+            {
+              "key": "amount",
+              "value": "10stablecoin5201"
+            },
+            {
+              "key": "recipient",
+              "value": "tp1kafgjq4kefv2f5lt85hvhqxcl460juxfxqz58k"
+            },
+            {
+              "key": "sender",
+              "value": "tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz"
+            },
+            {
+              "key": "amount",
+              "value": "5000000000nhash"
+            },
+            {
+              "key": "recipient",
+              "value": "tp1uhcvjyr437ur24yhtv228yrurt9zsthpv40gs6"
+            },
+            {
+              "key": "sender",
+              "value": "tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz"
+            },
+            {
+              "key": "amount",
+              "value": "5000000000nhash"
+            },
+            {
+              "key": "recipient",
+              "value": "tp1n0apzz2k9fda3hzlqqmu70kkkfcgc5sqqhe777"
+            },
+            {
+              "key": "sender",
+              "value": "tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz"
+            },
+            {
+              "key": "amount",
+              "value": "5stablecoin5201"
+            },
+            {
+              "key": "recipient",
+              "value": "tp1d8efdneqc5yw3xu6mmjduq7z75k3v4nz7x9jgx"
+            },
+            {
+              "key": "sender",
+              "value": "tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz"
+            },
+            {
+              "key": "amount",
+              "value": "5000000000nhash"
+            },
+            {
+              "key": "recipient",
+              "value": "tp1n0apzz2k9fda3hzlqqmu70kkkfcgc5sqqhe777"
+            },
+            {
+              "key": "sender",
+              "value": "tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz"
+            },
+            {
+              "key": "amount",
+              "value": "5stablecoin5201"
+            },
+            {
+              "key": "recipient",
+              "value": "tp1kafgjq4kefv2f5lt85hvhqxcl460juxfxqz58k"
+            },
+            {
+              "key": "sender",
+              "value": "tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz"
+            },
+            {
+              "key": "amount",
+              "value": "5000000000nhash"
+            }
+          ]
+        },
+        {
+          "type": "wasm",
+          "attributes": [
+            {
+              "key": "contract_address",
+              "value": "tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz"
+            },
+            {
+              "key": "match",
+              "value": "buy:buy-3,sell:sell-1"
+            },
+            {
+              "key": "match",
+              "value": "buy:buy-2,sell:sell-2"
+            },
+            {
+              "key": "match",
+              "value": "buy:buy-1,sell:sell-2"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "info": "",
+  "gas_wanted": "201740",
+  "gas_used": "200227",
+  "tx": null,
+  "timestamp": ""
+}
 ```
