@@ -116,8 +116,8 @@ fn try_buy(
             ts: env.block.time,
             buyer: info.sender,
             funds: funds.amount,
+            funds_denom: state.buy_denom,
             outstanding,
-            denom: state.buy_denom,
         },
     )?;
 
@@ -196,8 +196,8 @@ fn try_sell(
             ts: env.block.time,
             seller: info.sender,
             funds: funds.amount,
+            funds_denom: state.sell_denom,
             outstanding,
-            denom: state.sell_denom,
         },
     )?;
 
@@ -301,7 +301,7 @@ fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractE
     match sell.outstanding.cmp(&buy.funds) {
         Ordering::Less => {
             // Transfer sell.outstanding funds to seller
-            let amt = coin(sell.outstanding.u128(), buy.denom.clone());
+            let amt = coin(sell.outstanding.u128(), buy.funds_denom.clone());
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
@@ -316,7 +316,7 @@ fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractE
         }
         _ => {
             // Transfer buy.funds to seller
-            let amt = coin(buy.funds.u128(), buy.denom.clone());
+            let amt = coin(buy.funds.u128(), buy.funds_denom.clone());
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
@@ -335,7 +335,7 @@ fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractE
     match buy.outstanding.cmp(&sell.funds) {
         Ordering::Less => {
             // Transfer buy.outstanding funds to buyer
-            let amt = coin(buy.outstanding.u128(), sell.denom.clone());
+            let amt = coin(buy.outstanding.u128(), sell.funds_denom.clone());
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
@@ -350,7 +350,7 @@ fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractE
         }
         _ => {
             // Transfer sell.funds to buyer
-            let amt = coin(sell.funds.u128(), sell.denom.clone());
+            let amt = coin(sell.funds.u128(), sell.funds_denom.clone());
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
@@ -367,7 +367,7 @@ fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractE
 
     // If the sell ask amount was met but not all funds were required, refund them.
     if sell.outstanding.is_zero() && !sell.funds.is_zero() {
-        let refund = coin(sell.funds.u128(), sell.denom.clone());
+        let refund = coin(sell.funds.u128(), sell.funds_denom.clone());
         msgs.push(
             BankMsg::Send {
                 amount: vec![refund],
@@ -508,28 +508,201 @@ fn try_get_orderbook(deps: Deps) -> Result<QueryResponse, ContractError> {
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_env, mock_info};
+    use cosmwasm_std::{from_binary, Api, HumanAddr};
     use provwasm_mocks::mock_dependencies;
 
     #[test]
     fn valid_init() {
-        // Create standard mocks.
+        // Create mock deps.
         let mut deps = mock_dependencies(&[]);
-        let env = mock_env();
-        let info = mock_info("admin", &[]);
 
-        // Give the contract a name
-        let msg = InitMsg {
-            buy_denom: "stablecoin".into(),
-        };
+        // Init
+        let res = instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InitMsg {
+                buy_denom: "stablecoin".into(),
+            },
+        )
+        .unwrap();
 
         // Ensure no messages were created.
-        let res = instantiate(deps.as_mut(), env, info, msg).unwrap();
         assert_eq!(0, res.messages.len());
 
         // Read state
         let config_state = config_read(&deps.storage).load().unwrap();
+
+        // Ensure expected state values
         assert_eq!(config_state.sell_denom, "nhash");
         assert_eq!(config_state.sell_increment, Uint128(1000000000));
         assert_eq!(config_state.buy_denom, "stablecoin");
+    }
+
+    #[test]
+    fn valid_buy() {
+        // Create mock deps.
+        let mut deps = mock_dependencies(&[]);
+
+        // Init
+        let res = instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InitMsg {
+                buy_denom: "stablecoin".into(),
+            },
+        )
+        .unwrap();
+
+        // Ensure no messages were created.
+        assert_eq!(0, res.messages.len());
+
+        // Buy 10 hash at 1 stablecoin/hash price
+        let funds = coin(10, "stablecoin");
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("buyer"), &[funds]),
+            ExecuteMsg::Buy {
+                id: "test-buy-1".into(),
+                price: Uint128(1),
+            },
+        )
+        .unwrap();
+
+        // Query buys from orderbook
+        let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetBuyOrders {}).unwrap();
+
+        // Ensure buy side of orderbook has the expected state
+        let rep: BuyOrders = from_binary(&bin).unwrap();
+        deps.api.debug(&format!("{:?}", rep));
+        assert_eq!(rep.buy_orders.len(), 1);
+        assert_eq!(rep.buy_orders[0].id, "test-buy-1");
+        assert_eq!(rep.buy_orders[0].price, Uint128(1));
+        assert_eq!(rep.buy_orders[0].funds, Uint128(10));
+        assert_eq!(rep.buy_orders[0].outstanding, Uint128(10000000000));
+    }
+
+    #[test]
+    fn valid_sell() {
+        // Create mock deps.
+        let mut deps = mock_dependencies(&[]);
+
+        // Init
+        let res = instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InitMsg {
+                buy_denom: "stablecoin".into(),
+            },
+        )
+        .unwrap();
+
+        // Ensure no messages were created.
+        assert_eq!(0, res.messages.len());
+
+        // Sell 10 hash at 1 stablecoin/hash price
+        let funds = coin(10000000000, "nhash");
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("seller"), &[funds]),
+            ExecuteMsg::Sell {
+                id: "test-sell-1".into(),
+                price: Uint128(1),
+            },
+        )
+        .unwrap();
+
+        // Query sells from orderbook
+        let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetSellOrders {}).unwrap();
+
+        // Ensure buy side of orderbook has the expected state
+        let rep: SellOrders = from_binary(&bin).unwrap();
+        deps.api.debug(&format!("{:?}", rep));
+        assert_eq!(rep.sell_orders.len(), 1);
+        assert_eq!(rep.sell_orders[0].id, "test-sell-1");
+        assert_eq!(rep.sell_orders[0].price, Uint128(1));
+        assert_eq!(rep.sell_orders[0].funds, Uint128(10000000000));
+        assert_eq!(rep.sell_orders[0].outstanding, Uint128(10));
+    }
+
+    #[test]
+    fn valid_match() {
+        // Create mock deps.
+        let mut deps = mock_dependencies(&[]);
+
+        // Init
+        let res = instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InitMsg {
+                buy_denom: "stablecoin".into(),
+            },
+        )
+        .unwrap();
+
+        // Ensure no messages were created.
+        assert_eq!(0, res.messages.len());
+
+        // Buy 10 hash at 1 stablecoin/hash price
+        let funds = coin(10, "stablecoin");
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("buyer"), &[funds]),
+            ExecuteMsg::Buy {
+                id: "test-buy-1".into(),
+                price: Uint128(1),
+            },
+        )
+        .unwrap();
+
+        // Sell 10 hash at 1 stablecoin/hash price
+        let funds = coin(10000000000, "nhash");
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("seller"), &[funds]),
+            ExecuteMsg::Sell {
+                id: "test-sell-1".into(),
+                price: Uint128(1),
+            },
+        )
+        .unwrap();
+
+        // Query sells from orderbook
+        let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
+
+        // Ensure orderbook has the expected state
+        let rep: Orderbook = from_binary(&bin).unwrap();
+        assert_eq!(rep.buy_orders.len(), 1);
+        assert_eq!(rep.sell_orders.len(), 1);
+
+        deps.api.debug(&format!("{:?}", rep));
+
+        // Move block time forward so it seems like we're matching in the next block.
+        let mut env = mock_env();
+        env.block.time += 1;
+
+        // Execute a match
+        let res = execute(
+            deps.as_mut(),
+            env,
+            mock_info(HumanAddr::from("admin"), &[]),
+            ExecuteMsg::Match {},
+        )
+        .unwrap();
+
+        // Ensure we got two bank sends
+        assert_eq!(res.messages.len(), 2);
+
+        // Ensure we got one match
+        assert_eq!(res.attributes.len(), 1);
+
+        // TODO: Verify bank transfer amounts...
     }
 }

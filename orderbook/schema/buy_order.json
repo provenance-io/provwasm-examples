@@ -5,8 +5,8 @@
   "type": "object",
   "required": [
     "buyer",
-    "denom",
     "funds",
+    "funds_denom",
     "id",
     "outstanding",
     "price",
@@ -16,11 +16,11 @@
     "buyer": {
       "$ref": "#/definitions/HumanAddr"
     },
-    "denom": {
-      "type": "string"
-    },
     "funds": {
       "$ref": "#/definitions/Uint128"
+    },
+    "funds_denom": {
+      "type": "string"
     },
     "id": {
       "type": "string"

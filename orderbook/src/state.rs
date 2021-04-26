@@ -26,9 +26,9 @@ pub struct BuyOrder {
     pub price: Uint128,
     pub ts: u64,
     pub buyer: HumanAddr,
-    pub funds: Uint128,       // The stablecoin available for transfer
+    pub funds: Uint128, // The stablecoin available for transfer
+    pub funds_denom: String,
     pub outstanding: Uint128, // The outstanding proceeds for the buy
-    pub denom: String,
 }
 
 impl BuyOrder {
@@ -44,9 +44,9 @@ pub struct SellOrder {
     pub price: Uint128,
     pub ts: u64,
     pub seller: HumanAddr,
-    pub funds: Uint128,       // The nhash available for transfer
+    pub funds: Uint128, // The nhash available for transfer
+    pub funds_denom: String,
     pub outstanding: Uint128, // The outstanding proceeds for the sell
-    pub denom: String,
 }
 
 impl SellOrder {
