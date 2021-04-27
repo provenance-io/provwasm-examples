@@ -630,7 +630,7 @@ mod tests {
     }
 
     #[test]
-    fn one_to_one_match() {
+    fn direct_match() {
         // Create mock deps.
         let mut deps = mock_dependencies(&[]);
 
@@ -732,11 +732,215 @@ mod tests {
 
     #[test]
     fn partial_match_buy() {
-        //todo!()
+        // Create mock deps.
+        let mut deps = mock_dependencies(&[]);
+
+        // Init
+        let res = instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InitMsg {
+                buy_denom: "stablecoin".into(),
+            },
+        )
+        .unwrap();
+
+        // Ensure no messages were created.
+        assert_eq!(0, res.messages.len());
+
+        // Buy 10 hash at 1 stablecoin/hash price
+        let funds = coin(10, "stablecoin");
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("buyer"), &[funds]),
+            ExecuteMsg::Buy {
+                id: "test-buy-2".into(),
+                price: Uint128(1),
+            },
+        )
+        .unwrap();
+
+        // Sell 5 hash at 1 stablecoin/hash price
+        let funds = coin(5000000000, "nhash");
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("seller"), &[funds]),
+            ExecuteMsg::Sell {
+                id: "test-sell-2".into(),
+                price: Uint128(1),
+            },
+        )
+        .unwrap();
+
+        // Query the orderbook
+        let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
+
+        // Ensure both orders were added to the orderbook.
+        let rep: Orderbook = from_binary(&bin).unwrap();
+        assert_eq!(rep.buy_orders.len(), 1);
+        assert_eq!(rep.sell_orders.len(), 1);
+
+        deps.api.debug(&format!("{:?}", rep));
+
+        // Move block time forward so it seems like we're matching in the next block.
+        let mut env = mock_env();
+        env.block.time += 1;
+
+        // Execute a match
+        let res = execute(
+            deps.as_mut(),
+            env,
+            mock_info(HumanAddr::from("admin"), &[]), // Admin must execute match
+            ExecuteMsg::Match {},
+        )
+        .unwrap();
+
+        // Ensure we got two bank sends
+        assert_eq!(res.messages.len(), 2);
+
+        // Ensure we got the expected bank transfer amounts.
+        res.messages.into_iter().for_each(|msg| match msg {
+            CosmosMsg::Bank(BankMsg::Send {
+                amount, to_address, ..
+            }) => {
+                assert_eq!(amount.len(), 1);
+                if to_address == HumanAddr::from("seller") {
+                    let expected_seller_amount = coin(5, "stablecoin");
+                    assert_eq!(amount[0], expected_seller_amount);
+                } else {
+                    assert_eq!(to_address, "buyer");
+                    let expected_buyer_amount = coin(5000000000, "nhash");
+                    assert_eq!(amount[0], expected_buyer_amount);
+                }
+            }
+            _ => panic!("unexpected message type"),
+        });
+
+        // Ensure we got one match event attribute
+        assert_eq!(res.attributes.len(), 1);
+        assert_eq!(res.attributes[0].key, "orderbook.match");
+        assert_eq!(res.attributes[0].value, "buy:test-buy-2,sell:test-sell-2");
+
+        // Ensure both orders were removed from the orderbook.
+        let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
+        let rep: Orderbook = from_binary(&bin).unwrap();
+        assert_eq!(rep.buy_orders.len(), 1);
+        assert_eq!(rep.sell_orders.len(), 0);
+
+        // Verfiy there are still 5hash outstanding in sell order...
+        assert_eq!(rep.buy_orders[0].id, "test-buy-2");
+        assert_eq!(rep.buy_orders[0].price, Uint128(1));
+        assert_eq!(rep.buy_orders[0].funds, Uint128(5));
+        assert_eq!(rep.buy_orders[0].outstanding, Uint128(5000000000));
     }
 
     #[test]
     fn partial_match_sell() {
-        //todo!()
+        // Create mock deps.
+        let mut deps = mock_dependencies(&[]);
+
+        // Init
+        let res = instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InitMsg {
+                buy_denom: "stablecoin".into(),
+            },
+        )
+        .unwrap();
+
+        // Ensure no messages were created.
+        assert_eq!(0, res.messages.len());
+
+        // Buy 5 hash at 1 stablecoin/hash price
+        let funds = coin(5, "stablecoin");
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("buyer"), &[funds]),
+            ExecuteMsg::Buy {
+                id: "test-buy-2".into(),
+                price: Uint128(1),
+            },
+        )
+        .unwrap();
+
+        // Sell 10 hash at 1 stablecoin/hash price
+        let funds = coin(10000000000, "nhash");
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("seller"), &[funds]),
+            ExecuteMsg::Sell {
+                id: "test-sell-2".into(),
+                price: Uint128(1),
+            },
+        )
+        .unwrap();
+
+        // Query the orderbook
+        let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
+
+        // Ensure both orders were added to the orderbook.
+        let rep: Orderbook = from_binary(&bin).unwrap();
+        assert_eq!(rep.buy_orders.len(), 1);
+        assert_eq!(rep.sell_orders.len(), 1);
+
+        deps.api.debug(&format!("{:?}", rep));
+
+        // Move block time forward so it seems like we're matching in the next block.
+        let mut env = mock_env();
+        env.block.time += 1;
+
+        // Execute a match
+        let res = execute(
+            deps.as_mut(),
+            env,
+            mock_info(HumanAddr::from("admin"), &[]), // Admin must execute match
+            ExecuteMsg::Match {},
+        )
+        .unwrap();
+
+        // Ensure we got two bank sends
+        assert_eq!(res.messages.len(), 2);
+
+        // Ensure we got the expected bank transfer amounts.
+        res.messages.into_iter().for_each(|msg| match msg {
+            CosmosMsg::Bank(BankMsg::Send {
+                amount, to_address, ..
+            }) => {
+                assert_eq!(amount.len(), 1);
+                if to_address == HumanAddr::from("seller") {
+                    let expected_seller_amount = coin(5, "stablecoin");
+                    assert_eq!(amount[0], expected_seller_amount);
+                } else {
+                    assert_eq!(to_address, "buyer");
+                    let expected_buyer_amount = coin(5000000000, "nhash");
+                    assert_eq!(amount[0], expected_buyer_amount);
+                }
+            }
+            _ => panic!("unexpected message type"),
+        });
+
+        // Ensure we got one match event attribute
+        assert_eq!(res.attributes.len(), 1);
+        assert_eq!(res.attributes[0].key, "orderbook.match");
+        assert_eq!(res.attributes[0].value, "buy:test-buy-2,sell:test-sell-2");
+
+        // Ensure both orders were removed from the orderbook.
+        let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
+        let rep: Orderbook = from_binary(&bin).unwrap();
+        assert_eq!(rep.buy_orders.len(), 0);
+        assert_eq!(rep.sell_orders.len(), 1);
+
+        // Verfiy there are still 5hash outstanding in sell order...
+        assert_eq!(rep.sell_orders[0].id, "test-sell-2");
+        assert_eq!(rep.sell_orders[0].price, Uint128(1));
+        assert_eq!(rep.sell_orders[0].funds, Uint128(5000000000));
+        assert_eq!(rep.sell_orders[0].outstanding, Uint128(5));
     }
 }
