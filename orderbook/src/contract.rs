@@ -540,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn valid_buy() {
+    fn persist_buy_order() {
         // Create mock deps.
         let mut deps = mock_dependencies(&[]);
 
@@ -585,7 +585,7 @@ mod tests {
     }
 
     #[test]
-    fn valid_sell() {
+    fn persist_sell_order() {
         // Create mock deps.
         let mut deps = mock_dependencies(&[]);
 
@@ -630,7 +630,7 @@ mod tests {
     }
 
     #[test]
-    fn valid_match() {
+    fn one_to_one_match() {
         // Create mock deps.
         let mut deps = mock_dependencies(&[]);
 
@@ -674,10 +674,10 @@ mod tests {
         )
         .unwrap();
 
-        // Query sells from orderbook
+        // Query the orderbook
         let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
 
-        // Ensure orderbook has the expected state
+        // Ensure both orders were added to the orderbook.
         let rep: Orderbook = from_binary(&bin).unwrap();
         assert_eq!(rep.buy_orders.len(), 1);
         assert_eq!(rep.sell_orders.len(), 1);
@@ -692,7 +692,7 @@ mod tests {
         let res = execute(
             deps.as_mut(),
             env,
-            mock_info(HumanAddr::from("admin"), &[]),
+            mock_info(HumanAddr::from("admin"), &[]), // Admin must execute match
             ExecuteMsg::Match {},
         )
         .unwrap();
@@ -700,9 +700,43 @@ mod tests {
         // Ensure we got two bank sends
         assert_eq!(res.messages.len(), 2);
 
-        // Ensure we got one match
-        assert_eq!(res.attributes.len(), 1);
+        // Ensure we got the expected bank transfer amounts.
+        res.messages.into_iter().for_each(|msg| match msg {
+            CosmosMsg::Bank(BankMsg::Send {
+                amount, to_address, ..
+            }) => {
+                assert_eq!(amount.len(), 1);
+                if to_address == HumanAddr::from("seller") {
+                    let expected_seller_amount = coin(10, "stablecoin");
+                    assert_eq!(amount[0], expected_seller_amount);
+                } else {
+                    assert_eq!(to_address, "buyer");
+                    let expected_buyer_amount = coin(10000000000, "nhash");
+                    assert_eq!(amount[0], expected_buyer_amount);
+                }
+            }
+            _ => panic!("unexpected message type"),
+        });
 
-        // TODO: Verify bank transfer amounts...
+        // Ensure we got one match event attribute
+        assert_eq!(res.attributes.len(), 1);
+        assert_eq!(res.attributes[0].key, "match");
+        assert_eq!(res.attributes[0].value, "buy:test-buy-1,sell:test-sell-1");
+
+        // Ensure both orders were removed from the orderbook.
+        let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
+        let rep: Orderbook = from_binary(&bin).unwrap();
+        assert_eq!(rep.buy_orders.len(), 0);
+        assert_eq!(rep.sell_orders.len(), 0);
+    }
+
+    #[test]
+    fn partial_match_buy() {
+        //todo!()
+    }
+
+    #[test]
+    fn partial_match_sell() {
+        //todo!()
     }
 }
