@@ -251,7 +251,7 @@ fn try_match(deps: DepsMut, info: MessageInfo, env: Env) -> Result<Response, Con
 
             // Add a match event attribute to outgoing response
             res.add_attribute(
-                "match",
+                "orderbook.match",
                 format!("buy:{},sell:{}", match_res.buy.id, match_res.sell.id),
             );
 
@@ -720,7 +720,7 @@ mod tests {
 
         // Ensure we got one match event attribute
         assert_eq!(res.attributes.len(), 1);
-        assert_eq!(res.attributes[0].key, "match");
+        assert_eq!(res.attributes[0].key, "orderbook.match");
         assert_eq!(res.attributes[0].value, "buy:test-buy-1,sell:test-sell-1");
 
         // Ensure both orders were removed from the orderbook.
