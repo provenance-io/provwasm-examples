@@ -565,7 +565,7 @@ mod tests {
             mock_env(),
             mock_info(HumanAddr::from("buyer"), &[funds]),
             ExecuteMsg::Buy {
-                id: "test-buy-1".into(),
+                id: "test-buy".into(),
                 price: Uint128(1),
             },
         )
@@ -578,7 +578,7 @@ mod tests {
         let rep: BuyOrders = from_binary(&bin).unwrap();
         deps.api.debug(&format!("{:?}", rep));
         assert_eq!(rep.buy_orders.len(), 1);
-        assert_eq!(rep.buy_orders[0].id, "test-buy-1");
+        assert_eq!(rep.buy_orders[0].id, "test-buy");
         assert_eq!(rep.buy_orders[0].price, Uint128(1));
         assert_eq!(rep.buy_orders[0].funds, Uint128(10));
         assert_eq!(rep.buy_orders[0].outstanding, Uint128(10000000000));
@@ -610,7 +610,7 @@ mod tests {
             mock_env(),
             mock_info(HumanAddr::from("seller"), &[funds]),
             ExecuteMsg::Sell {
-                id: "test-sell-1".into(),
+                id: "test-sell".into(),
                 price: Uint128(1),
             },
         )
@@ -623,7 +623,7 @@ mod tests {
         let rep: SellOrders = from_binary(&bin).unwrap();
         deps.api.debug(&format!("{:?}", rep));
         assert_eq!(rep.sell_orders.len(), 1);
-        assert_eq!(rep.sell_orders[0].id, "test-sell-1");
+        assert_eq!(rep.sell_orders[0].id, "test-sell");
         assert_eq!(rep.sell_orders[0].price, Uint128(1));
         assert_eq!(rep.sell_orders[0].funds, Uint128(10000000000));
         assert_eq!(rep.sell_orders[0].outstanding, Uint128(10));
@@ -655,7 +655,7 @@ mod tests {
             mock_env(),
             mock_info(HumanAddr::from("buyer"), &[funds]),
             ExecuteMsg::Buy {
-                id: "test-buy-1".into(),
+                id: "test-buy".into(),
                 price: Uint128(1),
             },
         )
@@ -668,7 +668,7 @@ mod tests {
             mock_env(),
             mock_info(HumanAddr::from("seller"), &[funds]),
             ExecuteMsg::Sell {
-                id: "test-sell-1".into(),
+                id: "test-sell".into(),
                 price: Uint128(1),
             },
         )
@@ -686,7 +686,7 @@ mod tests {
 
         // Move block time forward so it seems like we're matching in the next block.
         let mut env = mock_env();
-        env.block.time += 1;
+        env.block.time += 5;
 
         // Execute a match
         let res = execute(
@@ -721,7 +721,7 @@ mod tests {
         // Ensure we got one match event attribute
         assert_eq!(res.attributes.len(), 1);
         assert_eq!(res.attributes[0].key, "orderbook.match");
-        assert_eq!(res.attributes[0].value, "buy:test-buy-1,sell:test-sell-1");
+        assert_eq!(res.attributes[0].value, "buy:test-buy,sell:test-sell");
 
         // Ensure both orders were removed from the orderbook.
         let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
@@ -756,7 +756,7 @@ mod tests {
             mock_env(),
             mock_info(HumanAddr::from("buyer"), &[funds]),
             ExecuteMsg::Buy {
-                id: "test-buy-2".into(),
+                id: "test-buy".into(),
                 price: Uint128(1),
             },
         )
@@ -769,7 +769,7 @@ mod tests {
             mock_env(),
             mock_info(HumanAddr::from("seller"), &[funds]),
             ExecuteMsg::Sell {
-                id: "test-sell-2".into(),
+                id: "test-sell".into(),
                 price: Uint128(1),
             },
         )
@@ -787,7 +787,7 @@ mod tests {
 
         // Move block time forward so it seems like we're matching in the next block.
         let mut env = mock_env();
-        env.block.time += 1;
+        env.block.time += 5;
 
         // Execute a match
         let res = execute(
@@ -808,12 +808,12 @@ mod tests {
             }) => {
                 assert_eq!(amount.len(), 1);
                 if to_address == HumanAddr::from("seller") {
-                    let expected_seller_amount = coin(5, "stablecoin");
-                    assert_eq!(amount[0], expected_seller_amount);
+                    let expected_amount = coin(5, "stablecoin");
+                    assert_eq!(amount[0], expected_amount);
                 } else {
                     assert_eq!(to_address, "buyer");
-                    let expected_buyer_amount = coin(5000000000, "nhash");
-                    assert_eq!(amount[0], expected_buyer_amount);
+                    let expected_amount = coin(5000000000, "nhash");
+                    assert_eq!(amount[0], expected_amount);
                 }
             }
             _ => panic!("unexpected message type"),
@@ -822,16 +822,16 @@ mod tests {
         // Ensure we got one match event attribute
         assert_eq!(res.attributes.len(), 1);
         assert_eq!(res.attributes[0].key, "orderbook.match");
-        assert_eq!(res.attributes[0].value, "buy:test-buy-2,sell:test-sell-2");
+        assert_eq!(res.attributes[0].value, "buy:test-buy,sell:test-sell");
 
-        // Ensure both orders were removed from the orderbook.
+        // Ensure the buy order was updated in the orderbook.
         let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
         let rep: Orderbook = from_binary(&bin).unwrap();
         assert_eq!(rep.buy_orders.len(), 1);
         assert_eq!(rep.sell_orders.len(), 0);
 
-        // Verfiy there are still 5hash outstanding in sell order...
-        assert_eq!(rep.buy_orders[0].id, "test-buy-2");
+        // Verfiy there are still 5 hash outstanding in the buy order
+        assert_eq!(rep.buy_orders[0].id, "test-buy");
         assert_eq!(rep.buy_orders[0].price, Uint128(1));
         assert_eq!(rep.buy_orders[0].funds, Uint128(5));
         assert_eq!(rep.buy_orders[0].outstanding, Uint128(5000000000));
@@ -863,7 +863,7 @@ mod tests {
             mock_env(),
             mock_info(HumanAddr::from("buyer"), &[funds]),
             ExecuteMsg::Buy {
-                id: "test-buy-2".into(),
+                id: "test-buy".into(),
                 price: Uint128(1),
             },
         )
@@ -876,7 +876,7 @@ mod tests {
             mock_env(),
             mock_info(HumanAddr::from("seller"), &[funds]),
             ExecuteMsg::Sell {
-                id: "test-sell-2".into(),
+                id: "test-sell".into(),
                 price: Uint128(1),
             },
         )
@@ -894,7 +894,7 @@ mod tests {
 
         // Move block time forward so it seems like we're matching in the next block.
         let mut env = mock_env();
-        env.block.time += 1;
+        env.block.time += 5;
 
         // Execute a match
         let res = execute(
@@ -915,12 +915,12 @@ mod tests {
             }) => {
                 assert_eq!(amount.len(), 1);
                 if to_address == HumanAddr::from("seller") {
-                    let expected_seller_amount = coin(5, "stablecoin");
-                    assert_eq!(amount[0], expected_seller_amount);
+                    let expected_amount = coin(5, "stablecoin");
+                    assert_eq!(amount[0], expected_amount);
                 } else {
                     assert_eq!(to_address, "buyer");
-                    let expected_buyer_amount = coin(5000000000, "nhash");
-                    assert_eq!(amount[0], expected_buyer_amount);
+                    let expected_amount = coin(5000000000, "nhash");
+                    assert_eq!(amount[0], expected_amount);
                 }
             }
             _ => panic!("unexpected message type"),
@@ -929,16 +929,16 @@ mod tests {
         // Ensure we got one match event attribute
         assert_eq!(res.attributes.len(), 1);
         assert_eq!(res.attributes[0].key, "orderbook.match");
-        assert_eq!(res.attributes[0].value, "buy:test-buy-2,sell:test-sell-2");
+        assert_eq!(res.attributes[0].value, "buy:test-buy,sell:test-sell");
 
-        // Ensure both orders were removed from the orderbook.
+        // Ensure the sell order was updated in the orderbook.
         let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
         let rep: Orderbook = from_binary(&bin).unwrap();
         assert_eq!(rep.buy_orders.len(), 0);
         assert_eq!(rep.sell_orders.len(), 1);
 
-        // Verfiy there are still 5hash outstanding in sell order...
-        assert_eq!(rep.sell_orders[0].id, "test-sell-2");
+        // Verify there are still 5 stablecoin outstanding in the sell order
+        assert_eq!(rep.sell_orders[0].id, "test-sell");
         assert_eq!(rep.sell_orders[0].price, Uint128(1));
         assert_eq!(rep.sell_orders[0].funds, Uint128(5000000000));
         assert_eq!(rep.sell_orders[0].outstanding, Uint128(5));

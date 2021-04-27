@@ -16,6 +16,13 @@ orders in an optimal position. In order for this to be truly decentralized, ther
 begin/end block hook (or something similar) that executes matching - which is not currently
 available to CosmWasm contracts.
 
+## TODO
+
+- Cancel buy
+- Cancel sell
+- Add 24hr order expiration
+- Purge expired orders
+
 ## Blockchain Setup
 
 Clear all current state, install the `provenanced` command, then start a 4-node localnet.
