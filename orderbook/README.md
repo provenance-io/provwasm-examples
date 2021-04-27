@@ -294,7 +294,7 @@ provenanced tx bank send \
 ```bash
 provenanced tx wasm store orderbook.wasm \
     --source "https://github.com/provenance-io/provwasm-examples/tree/main/orderbook" \
-    --builder "cosmwasm/rust-optimizer:0.11.0" \
+    --builder "cosmwasm/rust-optimizer:0.11.3" \
     --instantiate-only-address $(provenanced keys show -a node0 --keyring-backend test --home build/node0 --testnet) \
     --from node0 \
     --keyring-backend test \

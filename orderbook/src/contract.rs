@@ -943,4 +943,194 @@ mod tests {
         assert_eq!(rep.sell_orders[0].funds, Uint128(5000000000));
         assert_eq!(rep.sell_orders[0].outstanding, Uint128(5));
     }
+
+    #[test]
+    fn unauthorized_buy() {
+        // Create mock deps.
+        let mut deps = mock_dependencies(&[]);
+
+        // Init
+        instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InitMsg {
+                buy_denom: "stablecoin".into(),
+            },
+        )
+        .unwrap();
+
+        // Buy 5 hash at 1 stablecoin/hash price
+        let funds = coin(5, "stablecoin");
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("admin"), &[funds]), // Admin cannot place buy orders
+            ExecuteMsg::Buy {
+                id: "test-buy".into(),
+                price: Uint128(1),
+            },
+        )
+        .unwrap_err();
+
+        // Ensure we go the expected error
+        match err {
+            ContractError::Unauthorized {} => {}
+            _ => panic!("unexpected error type"),
+        }
+    }
+
+    #[test]
+    fn unauthorized_sell() {
+        // Create mock deps.
+        let mut deps = mock_dependencies(&[]);
+
+        // Init
+        instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InitMsg {
+                buy_denom: "stablecoin".into(),
+            },
+        )
+        .unwrap();
+
+        // Sell 10 hash at 1 stablecoin/hash price
+        let funds = coin(10000000000, "nhash");
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("admin"), &[funds]), // Admin cannot place sell orders
+            ExecuteMsg::Sell {
+                id: "test-sell".into(),
+                price: Uint128(1),
+            },
+        )
+        .unwrap_err();
+
+        // Ensure we go the expected error
+        match err {
+            ContractError::Unauthorized {} => {}
+            _ => panic!("unexpected error type"),
+        }
+    }
+
+    #[test]
+    fn unauthorized_match() {
+        // Create mock deps.
+        let mut deps = mock_dependencies(&[]);
+
+        // Init
+        let res = instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InitMsg {
+                buy_denom: "stablecoin".into(),
+            },
+        )
+        .unwrap();
+
+        // Ensure no messages were created.
+        assert_eq!(0, res.messages.len());
+
+        // Execute a match
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("seller"), &[]), // Admin must execute match
+            ExecuteMsg::Match {},
+        )
+        .unwrap_err();
+
+        // Ensure we go the expected error
+        match err {
+            ContractError::Unauthorized {} => {}
+            _ => panic!("unexpected error type"),
+        }
+    }
+
+    #[test]
+    fn invalid_buy_amount() {
+        // Create mock deps.
+        let mut deps = mock_dependencies(&[]);
+
+        // Init
+        let res = instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InitMsg {
+                buy_denom: "stablecoin".into(),
+            },
+        )
+        .unwrap();
+
+        // Ensure no messages were created.
+        assert_eq!(0, res.messages.len());
+
+        // Attempt to buy 1 hash at 15 stablecoin/hash price
+        let funds = coin(1, "stablecoin");
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("buyer"), &[funds]),
+            ExecuteMsg::Buy {
+                id: "test-buy".into(),
+                price: Uint128(15),
+            },
+        )
+        .unwrap_err();
+
+        // Ensure we go the expected error
+        match err {
+            ContractError::InvalidFunds { message } => {
+                assert_eq!(message, "funds must yield a buy amount in 1hash increments")
+            }
+            _ => panic!("unexpected error type"),
+        }
+    }
+
+    #[test]
+    fn invalid_sell_amount() {
+        // Create mock deps.
+        let mut deps = mock_dependencies(&[]);
+
+        // Init
+        let res = instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InitMsg {
+                buy_denom: "stablecoin".into(),
+            },
+        )
+        .unwrap();
+
+        // Ensure no messages were created.
+        assert_eq!(0, res.messages.len());
+
+        // Sell < 1 hash at 1 stablecoin/hash price
+        let funds = coin(123456789, "nhash");
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info(HumanAddr::from("seller"), &[funds]),
+            ExecuteMsg::Sell {
+                id: "test-sell".into(),
+                price: Uint128(1),
+            },
+        )
+        .unwrap_err();
+
+        // Ensure we go the expected error
+        match err {
+            ContractError::InvalidFunds { message } => assert_eq!(
+                message,
+                "sell amount must be > 0 in 1000000000 increments: got 123456789"
+            ),
+            _ => panic!("unexpected error type"),
+        }
+    }
 }
