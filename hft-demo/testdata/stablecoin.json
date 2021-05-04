@@ -1,0 +1,30 @@
+{
+    "address": "stablecoin",
+    "coins": [
+        {
+            "denom": "stablecoin",
+            "amount": "1000000"
+        }
+    ],
+    "public_key": "",
+    "account_number": 11,
+    "sequence": 0,
+    "permissions": [
+        {
+            "permissions": [
+                "admin",
+                "burn",
+                "deposit",
+                "delete",
+                "mint",
+                "withdraw"
+            ],
+            "address": "cosmos2contract"
+        }
+    ],
+    "status": "active",
+    "denom": "stablecoin",
+    "total_supply": "1000000",
+    "marker_type": "coin",
+    "supply_fixed": false
+}

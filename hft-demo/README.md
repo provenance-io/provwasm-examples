@@ -168,7 +168,7 @@ Grants on the `stock` marker.
 provenanced tx marker grant \
     $(provenanced keys show -a node0 --home build/node0 --keyring-backend test --testnet) \
     demosecurity \
-    admin,burn,deposit,delete,mint,transfer,withdraw \
+    admin,burn,deposit,delete,mint,withdraw \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \
@@ -186,7 +186,7 @@ Grants on the `stablecoin` marker.
 provenanced tx marker grant \
     $(provenanced keys show -a node0 --home build/node0 --keyring-backend test --testnet) \
     demostablecoin \
-    admin,burn,deposit,delete,mint,transfer,withdraw \
+    admin,burn,deposit,delete,mint,withdraw \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \
@@ -349,7 +349,7 @@ Add grants to the smart contract for the `stock` marker.
 provenanced tx marker grant \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
     demosecurity \
-    admin,burn,deposit,delete,mint,transfer,withdraw \
+    admin,burn,deposit,delete,mint,withdraw \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \
@@ -367,7 +367,7 @@ Add grants to the smart contract for the `stablecoin` marker.
 provenanced tx marker grant \
     tp18vd8fpwxzck93qlwghaj6arh4p7c5n89x8kskz \
     demostablecoin \
-    admin,burn,deposit,delete,mint,transfer,withdraw \
+    admin,burn,deposit,delete,mint,withdraw \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \

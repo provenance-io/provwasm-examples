@@ -1,0 +1,30 @@
+{
+    "address": "security",
+    "coins": [
+        {
+            "denom": "security",
+            "amount": "1000000000000"
+        }
+    ],
+    "public_key": "",
+    "account_number": 10,
+    "sequence": 0,
+    "permissions": [
+        {
+            "permissions": [
+                "admin",
+                "burn",
+                "deposit",
+                "delete",
+                "mint",
+                "withdraw"
+            ],
+            "address": "cosmos2contract"
+        }
+    ],
+    "status": "active",
+    "denom": "security",
+    "total_supply": "1000000000000",
+    "marker_type": "coin",
+    "supply_fixed": false
+}
