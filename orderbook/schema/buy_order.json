@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BuyOrder",
+  "description": "Persisted buy when a real-time sell match is not found.",
+  "type": "object",
+  "required": [
+    "buyer",
+    "funds",
+    "funds_denom",
+    "id",
+    "outstanding",
+    "price",
+    "ts"
+  ],
+  "properties": {
+    "buyer": {
+      "$ref": "#/definitions/HumanAddr"
+    },
+    "funds": {
+      "$ref": "#/definitions/Uint128"
+    },
+    "funds_denom": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "outstanding": {
+      "$ref": "#/definitions/Uint128"
+    },
+    "price": {
+      "$ref": "#/definitions/Uint128"
+    },
+    "ts": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    }
+  },
+  "definitions": {
+    "HumanAddr": {
+      "type": "string"
+    },
+    "Uint128": {
+      "type": "string"
+    }
+  }
+}
