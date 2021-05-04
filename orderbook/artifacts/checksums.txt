@@ -1,1 +1,1 @@
-37fcb8abc2347b7b11e73016c29937c9fdedc2572e284126c0accbbf572a3027  orderbook.wasm
+f4836289c8dcd3a76b12cda8ffe2d51bb9ddf626e70b1448afc66b9fef118202  orderbook.wasm

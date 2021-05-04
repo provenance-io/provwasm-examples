@@ -1,4 +1,4 @@
-use cosmwasm_std::{HumanAddr, Uint128};
+use cosmwasm_std::{Addr, Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -16,16 +16,16 @@ pub struct State {
     pub sell_denom: String,
     pub sell_increment: Uint128,
     pub buy_denom: String,
-    pub contract_admin: HumanAddr,
+    pub contract_admin: Addr,
 }
 
-/// Persisted buy when a real-time sell match is not found.
+/// Persisted buy order.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct BuyOrder {
     pub id: String,
     pub price: Uint128,
     pub ts: u64,
-    pub buyer: HumanAddr,
+    pub buyer: Addr,
     pub funds: Uint128, // The stablecoin available for transfer
     pub funds_denom: String,
     pub outstanding: Uint128, // The outstanding proceeds for the buy
@@ -37,13 +37,13 @@ impl BuyOrder {
     }
 }
 
-/// Persisted sell when a real-time buy matches are not found.
+/// Persisted sell order.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SellOrder {
     pub id: String,
     pub price: Uint128,
     pub ts: u64,
-    pub seller: HumanAddr,
+    pub seller: Addr,
     pub funds: Uint128, // The nhash available for transfer
     pub funds_denom: String,
     pub outstanding: Uint128, // The outstanding proceeds for the sell

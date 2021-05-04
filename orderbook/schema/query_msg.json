@@ -11,7 +11,8 @@
         "get_buy_orders": {
           "type": "object"
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "type": "object",
@@ -22,7 +23,8 @@
         "get_sell_orders": {
           "type": "object"
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "type": "object",
@@ -33,7 +35,8 @@
         "get_orderbook": {
           "type": "object"
         }
-      }
+      },
+      "additionalProperties": false
     }
   ]
 }

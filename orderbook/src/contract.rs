@@ -21,8 +21,8 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     // Create and store config state.
     let state = State {
-        sell_denom: "nhash".into(),          // nano-hash
-        sell_increment: Uint128(1000000000), // 1 hash
+        sell_denom: "nhash".into(),             // nano-hash
+        sell_increment: Uint128(1_000_000_000), // 1 hash
         buy_denom: msg.buy_denom,
         contract_admin: info.sender,
     };
@@ -113,7 +113,7 @@ fn try_buy(
         &BuyOrder {
             id: id.clone(),
             price,
-            ts: env.block.time,
+            ts: env.block.time.nanos(),
             buyer: info.sender,
             funds: funds.amount,
             funds_denom: state.buy_denom,
@@ -193,7 +193,7 @@ fn try_sell(
         &SellOrder {
             id: id.clone(),
             price,
-            ts: env.block.time,
+            ts: env.block.time.nanos(),
             seller: info.sender,
             funds: funds.amount,
             funds_denom: state.sell_denom,
@@ -220,7 +220,7 @@ fn try_match(deps: DepsMut, info: MessageInfo, env: Env) -> Result<Response, Con
 
     // Create aggregate response and get the BFT time of the current block.
     let mut res = Response::new();
-    let ts = env.block.time;
+    let ts = env.block.time.nanos();
 
     // Query and filter sell orders
     let sells: Vec<SellOrder> = get_sell_orders(deps.as_ref())?
@@ -305,12 +305,12 @@ fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractE
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
-                    to_address: sell.seller.clone(),
+                    to_address: sell.seller.to_string(),
                 }
                 .into(),
             );
             // Reduce buy.funds by sell.outstanding
-            buy.funds = (buy.funds - sell.outstanding)?;
+            buy.funds = Uint128(buy.funds.u128() - sell.outstanding.u128());
             // Set sell.outstanding to zero
             sell.outstanding = Uint128::zero();
         }
@@ -320,12 +320,12 @@ fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractE
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
-                    to_address: sell.seller.clone(),
+                    to_address: sell.seller.to_string(),
                 }
                 .into(),
             );
             // Reduce sell.outstanding by buy.funds
-            sell.outstanding = (sell.outstanding - buy.funds)?;
+            sell.outstanding = Uint128(sell.outstanding.u128() - buy.funds.u128());
             // Set buy.funds to zero
             buy.funds = Uint128::zero();
         }
@@ -339,12 +339,12 @@ fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractE
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
-                    to_address: buy.buyer.clone(),
+                    to_address: buy.buyer.to_string(),
                 }
                 .into(),
             );
             // Reduce sell.funds by buy.outstanding
-            sell.funds = (sell.funds - buy.outstanding)?;
+            sell.funds = Uint128(sell.funds.u128() - buy.outstanding.u128());
             // Set buy.outstanding to zero
             buy.outstanding = Uint128::zero();
         }
@@ -354,12 +354,12 @@ fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractE
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
-                    to_address: buy.buyer.clone(),
+                    to_address: buy.buyer.to_string(),
                 }
                 .into(),
             );
             // Reduce buy.outstanding by sell.funds
-            buy.outstanding = (buy.outstanding - sell.funds)?;
+            buy.outstanding = Uint128(buy.outstanding.u128() - sell.funds.u128());
             // Set sell.funds to zero
             sell.funds = Uint128::zero();
         }
@@ -371,7 +371,7 @@ fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractE
         msgs.push(
             BankMsg::Send {
                 amount: vec![refund],
-                to_address: sell.seller.clone(),
+                to_address: sell.seller.to_string(),
             }
             .into(),
         );
@@ -508,7 +508,7 @@ fn try_get_orderbook(deps: Deps) -> Result<QueryResponse, ContractError> {
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_env, mock_info};
-    use cosmwasm_std::{from_binary, Api, HumanAddr};
+    use cosmwasm_std::{from_binary, Addr, Api};
     use provwasm_mocks::mock_dependencies;
 
     #[test]
@@ -535,7 +535,7 @@ mod tests {
 
         // Ensure expected state values
         assert_eq!(config_state.sell_denom, "nhash");
-        assert_eq!(config_state.sell_increment, Uint128(1000000000));
+        assert_eq!(config_state.sell_increment, Uint128(1_000_000_000));
         assert_eq!(config_state.buy_denom, "stablecoin");
     }
 
@@ -563,7 +563,7 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("buyer"), &[funds]),
+            mock_info("buyer", &[funds]),
             ExecuteMsg::Buy {
                 id: "test-buy".into(),
                 price: Uint128(1),
@@ -581,7 +581,7 @@ mod tests {
         assert_eq!(rep.buy_orders[0].id, "test-buy");
         assert_eq!(rep.buy_orders[0].price, Uint128(1));
         assert_eq!(rep.buy_orders[0].funds, Uint128(10));
-        assert_eq!(rep.buy_orders[0].outstanding, Uint128(10000000000));
+        assert_eq!(rep.buy_orders[0].outstanding, Uint128(10_000_000_000));
     }
 
     #[test]
@@ -604,11 +604,11 @@ mod tests {
         assert_eq!(0, res.messages.len());
 
         // Sell 10 hash at 1 stablecoin/hash price
-        let funds = coin(10000000000, "nhash");
+        let funds = coin(10_000_000_000, "nhash");
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("seller"), &[funds]),
+            mock_info("seller", &[funds]),
             ExecuteMsg::Sell {
                 id: "test-sell".into(),
                 price: Uint128(1),
@@ -625,7 +625,7 @@ mod tests {
         assert_eq!(rep.sell_orders.len(), 1);
         assert_eq!(rep.sell_orders[0].id, "test-sell");
         assert_eq!(rep.sell_orders[0].price, Uint128(1));
-        assert_eq!(rep.sell_orders[0].funds, Uint128(10000000000));
+        assert_eq!(rep.sell_orders[0].funds, Uint128(10_000_000_000));
         assert_eq!(rep.sell_orders[0].outstanding, Uint128(10));
     }
 
@@ -653,7 +653,7 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("buyer"), &[funds]),
+            mock_info("buyer", &[funds]),
             ExecuteMsg::Buy {
                 id: "test-buy".into(),
                 price: Uint128(1),
@@ -662,11 +662,11 @@ mod tests {
         .unwrap();
 
         // Sell 10 hash at 1 stablecoin/hash price
-        let funds = coin(10000000000, "nhash");
+        let funds = coin(10_000_000_000, "nhash");
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("seller"), &[funds]),
+            mock_info("seller", &[funds]),
             ExecuteMsg::Sell {
                 id: "test-sell".into(),
                 price: Uint128(1),
@@ -686,13 +686,13 @@ mod tests {
 
         // Move block time forward so it seems like we're matching in the next block.
         let mut env = mock_env();
-        env.block.time += 5;
+        env.block.time = env.block.time.plus_seconds(3);
 
         // Execute a match
         let res = execute(
             deps.as_mut(),
             env,
-            mock_info(HumanAddr::from("admin"), &[]), // Admin must execute match
+            mock_info("admin", &[]), // Admin must execute match
             ExecuteMsg::Match {},
         )
         .unwrap();
@@ -706,12 +706,12 @@ mod tests {
                 amount, to_address, ..
             }) => {
                 assert_eq!(amount.len(), 1);
-                if to_address == HumanAddr::from("seller") {
+                if to_address == Addr::unchecked("seller") {
                     let expected_seller_amount = coin(10, "stablecoin");
                     assert_eq!(amount[0], expected_seller_amount);
                 } else {
                     assert_eq!(to_address, "buyer");
-                    let expected_buyer_amount = coin(10000000000, "nhash");
+                    let expected_buyer_amount = coin(10_000_000_000, "nhash");
                     assert_eq!(amount[0], expected_buyer_amount);
                 }
             }
@@ -754,7 +754,7 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("buyer"), &[funds]),
+            mock_info("buyer", &[funds]),
             ExecuteMsg::Buy {
                 id: "test-buy".into(),
                 price: Uint128(1),
@@ -763,11 +763,11 @@ mod tests {
         .unwrap();
 
         // Sell 5 hash at 1 stablecoin/hash price
-        let funds = coin(5000000000, "nhash");
+        let funds = coin(5_000_000_000, "nhash");
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("seller"), &[funds]),
+            mock_info("seller", &[funds]),
             ExecuteMsg::Sell {
                 id: "test-sell".into(),
                 price: Uint128(1),
@@ -787,13 +787,13 @@ mod tests {
 
         // Move block time forward so it seems like we're matching in the next block.
         let mut env = mock_env();
-        env.block.time += 5;
+        env.block.time = env.block.time.plus_seconds(3);
 
         // Execute a match
         let res = execute(
             deps.as_mut(),
             env,
-            mock_info(HumanAddr::from("admin"), &[]), // Admin must execute match
+            mock_info("admin", &[]), // Admin must execute match
             ExecuteMsg::Match {},
         )
         .unwrap();
@@ -807,12 +807,12 @@ mod tests {
                 amount, to_address, ..
             }) => {
                 assert_eq!(amount.len(), 1);
-                if to_address == HumanAddr::from("seller") {
+                if to_address == Addr::unchecked("seller") {
                     let expected_amount = coin(5, "stablecoin");
                     assert_eq!(amount[0], expected_amount);
                 } else {
                     assert_eq!(to_address, "buyer");
-                    let expected_amount = coin(5000000000, "nhash");
+                    let expected_amount = coin(5_000_000_000, "nhash");
                     assert_eq!(amount[0], expected_amount);
                 }
             }
@@ -834,7 +834,7 @@ mod tests {
         assert_eq!(rep.buy_orders[0].id, "test-buy");
         assert_eq!(rep.buy_orders[0].price, Uint128(1));
         assert_eq!(rep.buy_orders[0].funds, Uint128(5));
-        assert_eq!(rep.buy_orders[0].outstanding, Uint128(5000000000));
+        assert_eq!(rep.buy_orders[0].outstanding, Uint128(5_000_000_000));
     }
 
     #[test]
@@ -861,7 +861,7 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("buyer"), &[funds]),
+            mock_info("buyer", &[funds]),
             ExecuteMsg::Buy {
                 id: "test-buy".into(),
                 price: Uint128(1),
@@ -870,11 +870,11 @@ mod tests {
         .unwrap();
 
         // Sell 10 hash at 1 stablecoin/hash price
-        let funds = coin(10000000000, "nhash");
+        let funds = coin(10_000_000_000, "nhash");
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("seller"), &[funds]),
+            mock_info("seller", &[funds]),
             ExecuteMsg::Sell {
                 id: "test-sell".into(),
                 price: Uint128(1),
@@ -894,13 +894,13 @@ mod tests {
 
         // Move block time forward so it seems like we're matching in the next block.
         let mut env = mock_env();
-        env.block.time += 5;
+        env.block.time = env.block.time.plus_seconds(3);
 
         // Execute a match
         let res = execute(
             deps.as_mut(),
             env,
-            mock_info(HumanAddr::from("admin"), &[]), // Admin must execute match
+            mock_info("admin", &[]), // Admin must execute match
             ExecuteMsg::Match {},
         )
         .unwrap();
@@ -914,12 +914,12 @@ mod tests {
                 amount, to_address, ..
             }) => {
                 assert_eq!(amount.len(), 1);
-                if to_address == HumanAddr::from("seller") {
+                if to_address == Addr::unchecked("seller") {
                     let expected_amount = coin(5, "stablecoin");
                     assert_eq!(amount[0], expected_amount);
                 } else {
                     assert_eq!(to_address, "buyer");
-                    let expected_amount = coin(5000000000, "nhash");
+                    let expected_amount = coin(5_000_000_000, "nhash");
                     assert_eq!(amount[0], expected_amount);
                 }
             }
@@ -940,7 +940,7 @@ mod tests {
         // Verify there are still 5 stablecoin outstanding in the sell order
         assert_eq!(rep.sell_orders[0].id, "test-sell");
         assert_eq!(rep.sell_orders[0].price, Uint128(1));
-        assert_eq!(rep.sell_orders[0].funds, Uint128(5000000000));
+        assert_eq!(rep.sell_orders[0].funds, Uint128(5_000_000_000));
         assert_eq!(rep.sell_orders[0].outstanding, Uint128(5));
     }
 
@@ -965,7 +965,7 @@ mod tests {
         let err = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("admin"), &[funds]), // Admin cannot place buy orders
+            mock_info("admin", &[funds]), // Admin cannot place buy orders
             ExecuteMsg::Buy {
                 id: "test-buy".into(),
                 price: Uint128(1),
@@ -1001,7 +1001,7 @@ mod tests {
         let err = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("admin"), &[funds]), // Admin cannot place sell orders
+            mock_info("admin", &[funds]), // Admin cannot place sell orders
             ExecuteMsg::Sell {
                 id: "test-sell".into(),
                 price: Uint128(1),
@@ -1039,7 +1039,7 @@ mod tests {
         let err = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("seller"), &[]), // Admin must execute match
+            mock_info("seller", &[]), // Admin must execute match
             ExecuteMsg::Match {},
         )
         .unwrap_err();
@@ -1075,7 +1075,7 @@ mod tests {
         let err = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("buyer"), &[funds]),
+            mock_info("buyer", &[funds]),
             ExecuteMsg::Buy {
                 id: "test-buy".into(),
                 price: Uint128(15),
@@ -1116,7 +1116,7 @@ mod tests {
         let err = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("seller"), &[funds]),
+            mock_info("seller", &[funds]),
             ExecuteMsg::Sell {
                 id: "test-sell".into(),
                 price: Uint128(1),
