@@ -179,7 +179,7 @@ Grant access on the marker to the `node0` account.
 provenanced tx marker grant \
     $(provenanced keys show -a node0 --home build/node0 --keyring-backend test --testnet) \
     stablecoin5201 \
-    admin,burn,deposit,delete,mint,transfer,withdraw \
+    admin,burn,deposit,delete,mint,withdraw \
     --from node0 \
     --keyring-backend test \
     --home build/node0 \

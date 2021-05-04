@@ -113,7 +113,7 @@ fn try_buy(
         &BuyOrder {
             id: id.clone(),
             price,
-            ts: env.block.time.nanos(),
+            ts: env.block.time.nanos() / 1_000_000_000, // use seconds
             buyer: info.sender,
             funds: funds.amount,
             funds_denom: state.buy_denom,
@@ -179,8 +179,8 @@ fn try_sell(
 
     // Ensure an order with the given ID doesn't already exist.
     let order_key = id.as_bytes();
-    let mut sell_book = sell_orders(deps.storage);
-    if sell_book.may_load(&order_key)?.is_some() {
+    let mut book = sell_orders(deps.storage);
+    if book.may_load(&order_key)?.is_some() {
         return Err(ContractError::DuplicateSell { id: id.clone() });
     }
 
@@ -188,12 +188,12 @@ fn try_sell(
     let outstanding = funds.amount * Decimal::from_ratio(price.u128(), state.sell_increment.u128());
 
     // Persist sell order
-    sell_book.save(
+    book.save(
         &order_key,
         &SellOrder {
             id: id.clone(),
             price,
-            ts: env.block.time.nanos(),
+            ts: env.block.time.nanos() / 1_000_000_000, // use seconds
             seller: info.sender,
             funds: funds.amount,
             funds_denom: state.sell_denom,
@@ -220,7 +220,7 @@ fn try_match(deps: DepsMut, info: MessageInfo, env: Env) -> Result<Response, Con
 
     // Create aggregate response and get the BFT time of the current block.
     let mut res = Response::new();
-    let ts = env.block.time.nanos();
+    let ts = env.block.time.nanos() / 1_000_000_000; // use seconds
 
     // Query and filter sell orders
     let sells: Vec<SellOrder> = get_sell_orders(deps.as_ref())?
