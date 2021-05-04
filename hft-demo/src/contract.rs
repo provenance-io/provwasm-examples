@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coin, has_coins, to_binary, BankMsg, Coin, CosmosMsg, Deps, DepsMut, Env, HumanAddr,
-    MessageInfo, QueryResponse, Response, Uint128,
+    coin, has_coins, to_binary, Addr, BankMsg, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
+    QueryResponse, Response, Uint128,
 };
 
 use provwasm_std::{withdraw_coins, ProvenanceMsg, ProvenanceQuerier};
@@ -42,7 +42,7 @@ pub fn execute(
 fn try_add_trader(
     deps: DepsMut,
     info: MessageInfo,
-    address: HumanAddr,
+    address: String,
 ) -> Result<Response<ProvenanceMsg>, ContractError> {
     // Load contract state and validate the message sender is the contact admin.
     let state = config_read(deps.storage).load()?;
@@ -60,12 +60,12 @@ fn try_add_trader(
     let mut bucket = trader_bucket(deps.storage);
 
     // Initialize and save trader config state if necessary.
-    let trader_key = deps.api.canonical_address(&address)?;
+    let trader_key = deps.api.addr_canonicalize(&address)?;
     if bucket.may_load(&trader_key)?.is_none() {
         bucket.save(
             &trader_key,
             &TraderState {
-                loan_cap: Uint128(10000000000_u128),
+                loan_cap: Uint128(10_000_000_000_u128),
                 loans: Uint128::zero(),
             },
         )?;
@@ -88,7 +88,7 @@ fn try_buy_stock(
     }
 
     // Error if trader sent zero funds and has reached or exceeded the loan cap
-    let trader_key = deps.api.canonical_address(&info.sender)?;
+    let trader_key = deps.api.addr_canonicalize(&info.sender.to_string())?;
     let trader_state = trader_bucket_read(deps.storage).load(&trader_key)?;
 
     if info.funds.is_empty() && trader_state.loans >= trader_state.loan_cap {
@@ -124,10 +124,10 @@ fn try_buy_stock(
         } else {
             Uint128::zero()
         };
-        let loan_amount = (price.amount - sent_amount)?;
+        let loan_amount = Uint128(price.amount.u128() - sent_amount.u128());
 
         // Ensure trader is under loan cap after borrowing.
-        let max_loan_amount = (trader_state.loan_cap - trader_state.loans)?;
+        let max_loan_amount = Uint128(trader_state.loan_cap.u128() - trader_state.loans.u128());
         if loan_amount > max_loan_amount {
             return Err(ContractError::LoanCapExceeded {
                 amount,
@@ -141,7 +141,7 @@ fn try_buy_stock(
             stablecoin,
             loan_amount.u128(),
             stablecoin,
-            &env.contract.address,
+            env.contract.address,
         )?;
         res.add_message(loan_msg);
 
@@ -158,17 +158,17 @@ fn try_buy_stock(
 
     // Issue a refund if the funds sent aren't exactly the amount necessary.
     } else if info.funds.len() == 1 && info.funds[0].amount > price.amount {
-        let refund_amount = (info.funds[0].amount - price.amount)?;
-        let refund = coin(refund_amount.u128(), stablecoin);
+        let refund_amount = info.funds[0].amount.u128() - price.amount.u128();
+        let refund = coin(refund_amount, stablecoin);
         let refund_msg: CosmosMsg<ProvenanceMsg> = CosmosMsg::Bank(BankMsg::Send {
-            to_address: info.sender.clone(),
+            to_address: info.sender.to_string(),
             amount: vec![refund],
         });
         res.add_message(refund_msg);
     }
 
     // Withdraw stock to trader's account.
-    let stock_msg = withdraw_coins(security, amount.u128(), security, &info.sender)?;
+    let stock_msg = withdraw_coins(security, amount.u128(), security, info.sender)?;
     res.add_message(stock_msg);
 
     Ok(res)
@@ -194,15 +194,15 @@ fn try_sell_stock(
     }
 
     // Load trader state
-    let trader_key = deps.api.canonical_address(&info.sender)?;
+    let trader_key = deps.api.addr_canonicalize(&info.sender.to_string())?;
     let trader_state = trader_bucket_read(deps.storage).load(&trader_key)?;
 
     // Load security and stablecoin marker denoms.
     let config_state = config_read(deps.storage).load()?;
     let security: &str = &config_state.security;
-    let security_pool: HumanAddr = get_marker_address(deps.as_ref(), security)?;
+    let security_pool: Addr = get_marker_address(deps.as_ref(), security)?;
     let stablecoin: &str = &config_state.stablecoin;
-    let stablecoin_pool: HumanAddr = get_marker_address(deps.as_ref(), stablecoin)?;
+    let stablecoin_pool: Addr = get_marker_address(deps.as_ref(), stablecoin)?;
 
     // Ensure the trader sent the correct amount of stock
     if info.funds[0].denom != security || amount != info.funds[0].amount {
@@ -219,7 +219,7 @@ fn try_sell_stock(
         // Send stablecoin to trader
         let bank_msg: CosmosMsg<ProvenanceMsg> = CosmosMsg::Bank(BankMsg::Send {
             amount: vec![proceeds],
-            to_address: info.sender.clone(),
+            to_address: info.sender.to_string(),
         });
         res.add_message(bank_msg);
 
@@ -229,16 +229,16 @@ fn try_sell_stock(
         let loan_amount = coin(trader_state.loans.u128(), stablecoin);
         let loan_msg: CosmosMsg<ProvenanceMsg> = CosmosMsg::Bank(BankMsg::Send {
             amount: vec![loan_amount],
-            to_address: stablecoin_pool,
+            to_address: stablecoin_pool.to_string(),
         });
         res.add_message(loan_msg);
 
         // Determine the amount to send to the trader
-        let net = (proceeds.amount - trader_state.loans)?;
+        let net = Uint128(proceeds.amount.u128() - trader_state.loans.u128());
         let net_amount = coin(net.u128(), stablecoin);
         let net_msg: CosmosMsg<ProvenanceMsg> = CosmosMsg::Bank(BankMsg::Send {
             amount: vec![net_amount],
-            to_address: info.sender.clone(),
+            to_address: info.sender.to_string(),
         });
         res.add_message(net_msg);
 
@@ -259,12 +259,12 @@ fn try_sell_stock(
         // Send proceeds back to the loan pool
         let bank_msg: CosmosMsg<ProvenanceMsg> = CosmosMsg::Bank(BankMsg::Send {
             amount: vec![proceeds.clone()],
-            to_address: stablecoin_pool,
+            to_address: stablecoin_pool.to_string(),
         });
         res.add_message(bank_msg);
 
         // Mark off trader loan debt.
-        let updated_loans = (trader_state.loans - proceeds.amount)?;
+        let updated_loans = Uint128(trader_state.loans.u128() - proceeds.amount.u128());
         trader_bucket(deps.storage).update(&trader_key, |opt| -> Result<_, ContractError> {
             match opt {
                 Some(mut ts) => {
@@ -279,7 +279,7 @@ fn try_sell_stock(
     // Send security back to stock pool
     let stock_msg: CosmosMsg<ProvenanceMsg> = CosmosMsg::Bank(BankMsg::Send {
         amount: info.funds,
-        to_address: security_pool,
+        to_address: security_pool.to_string(),
     });
     res.add_message(stock_msg);
 
@@ -287,7 +287,7 @@ fn try_sell_stock(
 }
 
 // Get the address for a marker or return an error if the marker doesn't exist.
-fn get_marker_address(deps: Deps, denom: &str) -> Result<HumanAddr, ContractError> {
+fn get_marker_address(deps: Deps, denom: &str) -> Result<Addr, ContractError> {
     let querier = ProvenanceQuerier::new(&deps.querier);
     let marker = querier.get_marker_by_denom(denom)?;
     Ok(marker.address)
@@ -301,9 +301,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<QueryResponse, Cont
 }
 
 // Query for trader loan cap and debt.
-fn try_get_trader_state(deps: Deps, address: HumanAddr) -> Result<QueryResponse, ContractError> {
+fn try_get_trader_state(deps: Deps, address: String) -> Result<QueryResponse, ContractError> {
     // Load state
-    let trader_key = deps.api.canonical_address(&address)?;
+    let trader_key = deps.api.addr_canonicalize(&address)?;
     let trader_state = trader_bucket_read(deps.storage).load(&trader_key)?;
     let state = config_read(deps.storage).load()?;
     // Get the amount of stock for the trader.
@@ -372,8 +372,7 @@ mod tests {
         // Create standard mocks.
         let mut deps = mock_dependencies(&[]);
         let stablecoins = coin(0, "stablecoin");
-        deps.querier
-            .update_balance(HumanAddr::from("trader"), vec![stablecoins]);
+        deps.querier.update_balance("trader", vec![stablecoins]);
 
         // Init so we have config state.
         instantiate(
@@ -416,7 +415,7 @@ mod tests {
                 security: Uint128::zero(),
                 stablecoin: Uint128::zero(),
                 loans: Uint128::zero(),
-                loan_cap: Uint128(10000000000_u128),
+                loan_cap: Uint128(10_000_000_000_u128),
             }
         );
     }
@@ -426,8 +425,7 @@ mod tests {
         // Create standard mocks.
         let mut deps = mock_dependencies(&[]);
         let stablecoins = coin(100, "stablecoin");
-        deps.querier
-            .update_balance(HumanAddr::from("trader"), vec![stablecoins]);
+        deps.querier.update_balance("trader", vec![stablecoins]);
 
         // Init so we have config state.
         instantiate(
@@ -457,7 +455,7 @@ mod tests {
         let res = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("trader"), &[funds]),
+            mock_info("trader", &[funds]),
             ExecuteMsg::BuyStock {
                 amount: Uint128(100),
             },
@@ -475,7 +473,7 @@ mod tests {
             } => {
                 assert_eq!(marker_denom, "security");
                 assert_eq!(coin, &security_amount);
-                assert_eq!(recipient, "trader");
+                assert_eq!(recipient, &Addr::unchecked("trader"));
             }
             _ => panic!("expected marker withdraw params"),
         }
@@ -486,8 +484,7 @@ mod tests {
         // Create standard mocks.
         let mut deps = mock_dependencies(&[]);
         let stablecoins = coin(100, "stablecoin");
-        deps.querier
-            .update_balance(HumanAddr::from("trader"), vec![stablecoins]);
+        deps.querier.update_balance("trader", vec![stablecoins]);
 
         // Init so we have config state.
         instantiate(
@@ -517,7 +514,7 @@ mod tests {
         let res = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info(HumanAddr::from("trader"), &[funds]),
+            mock_info("trader", &[funds]),
             ExecuteMsg::BuyStock {
                 amount: Uint128(300),
             },
@@ -540,11 +537,11 @@ mod tests {
                 } => {
                     if marker_denom == "security" {
                         assert_eq!(coin, &expected_security);
-                        assert_eq!(recipient, "trader");
+                        assert_eq!(recipient, &Addr::unchecked("trader"));
                     } else {
                         assert_eq!(marker_denom, "stablecoin");
                         assert_eq!(coin, &expected_loan);
-                        assert_eq!(recipient, MOCK_CONTRACT_ADDR);
+                        assert_eq!(recipient, &Addr::unchecked(MOCK_CONTRACT_ADDR));
                     }
                 }
                 _ => panic!("expected marker withdraw params"),

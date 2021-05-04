@@ -313,7 +313,7 @@ in provenance.
 ```bash
 provenanced tx wasm store hft.wasm \
     --source "https://github.com/provenance-io/provwasm-examples/tree/main/hft-demo" \
-    --builder "cosmwasm/rust-optimizer:0.10.7" \
+    --builder "cosmwasm/rust-optimizer:0.11.3" \
     --instantiate-only-address $(provenanced keys show -a node0 --keyring-backend test --home build/node0 --testnet) \
     --from node0 \
     --keyring-backend test \
@@ -396,7 +396,7 @@ provenanced tx wasm execute \
     --testnet | jq
 ```
 
-Query the inital trader state, showing stock balance, stablecoin balance, debt, and loan cap.
+Query the initial trader state, showing stock balance, stablecoin balance, debt, and loan cap.
 (NOTE: trader address value may be different)
 
 ```bash

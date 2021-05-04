@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{HumanAddr, Storage, Uint128};
+use cosmwasm_std::{Addr, Storage, Uint128};
 use cosmwasm_storage::{
     bucket, bucket_read, singleton, singleton_read, Bucket, ReadonlyBucket, ReadonlySingleton,
     Singleton,
@@ -13,9 +13,9 @@ pub static TRADER_KEY: &[u8] = b"trader";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
-    pub contract_admin: HumanAddr, // Ensures only sender from contract init can call handle.
-    pub security: String,          // The denom of the stock pool marker.
-    pub stablecoin: String,        // The denom of the loan pool marker.
+    pub contract_admin: Addr, // Ensures only sender from contract init can call handle.
+    pub security: String,     // The denom of the stock pool marker.
+    pub stablecoin: String,   // The denom of the loan pool marker.
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

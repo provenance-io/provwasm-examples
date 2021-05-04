@@ -1,4 +1,4 @@
-use cosmwasm_std::{HumanAddr, Uint128};
+use cosmwasm_std::Uint128;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -12,15 +12,15 @@ pub struct InitMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    AddTrader { address: HumanAddr }, // Sets loan cap based on stablecoin balance.
-    BuyStock { amount: Uint128 },     // The shares to buy
-    SellStock { amount: Uint128 },    // The shares to sell
+    AddTrader { address: String }, // Sets loan cap based on stablecoin balance.
+    BuyStock { amount: Uint128 },  // The shares to buy
+    SellStock { amount: Uint128 }, // The shares to sell
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    GetTraderState { address: HumanAddr },
+    GetTraderState { address: String },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
