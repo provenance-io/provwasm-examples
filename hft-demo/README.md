@@ -414,7 +414,7 @@ Expected output
     "security": "0",
     "stablecoin": "100",
     "loans": "0",
-    "loan_cap": "900"
+    "loan_cap": "10000000000"
   }
 }
 ```
@@ -458,7 +458,7 @@ provenanced q wasm contract-state smart \
     "security": "300",
     "stablecoin": "0",
     "loans": "200",
-    "loan_cap": "900"
+    "loan_cap": "10000000000"
   }
 }
 ```
@@ -500,7 +500,7 @@ provenanced q wasm contract-state smart \
     "security": "800",
     "stablecoin": "0",
     "loans": "700",
-    "loan_cap": "900"
+    "loan_cap": "10000000000"
   }
 }
 ```
@@ -542,7 +542,7 @@ Expected output
     "security": "50",
     "stablecoin": "50",
     "loans": "0",
-    "loan_cap": "900"
+    "loan_cap": "10000000000"
   }
 }
 ```
@@ -584,7 +584,7 @@ Should get the overpayment amount of  10 `stablecoin` back
     "security": "60",
     "stablecoin": "40",
     "loans": "0",
-    "loan_cap": "900"
+    "loan_cap": "10000000000"
   }
 }
 ```
