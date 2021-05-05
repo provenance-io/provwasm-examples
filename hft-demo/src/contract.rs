@@ -6,7 +6,7 @@ use cosmwasm_std::{
 use provwasm_std::{withdraw_coins, ProvenanceMsg, ProvenanceQuerier};
 
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InitMsg, QueryMsg, TraderStateResponse};
+use crate::msg::{ExecuteMsg, InitMsg, MigrateMsg, QueryMsg, TraderStateResponse};
 use crate::state::{config, config_read, trader_bucket, trader_bucket_read, State, TraderState};
 
 /// Initialize the smart contract config state.
@@ -124,10 +124,10 @@ fn try_buy_stock(
         } else {
             Uint128::zero()
         };
-        let loan_amount = Uint128(price.amount.u128() - sent_amount.u128());
+        let loan_amount = price.amount.u128() - sent_amount.u128();
 
         // Ensure trader is under loan cap after borrowing.
-        let max_loan_amount = Uint128(trader_state.loan_cap.u128() - trader_state.loans.u128());
+        let max_loan_amount = trader_state.loan_cap.u128() - trader_state.loans.u128();
         if loan_amount > max_loan_amount {
             return Err(ContractError::LoanCapExceeded {
                 amount,
@@ -137,19 +137,14 @@ fn try_buy_stock(
         }
 
         // Escrow loan amount from the stablecoin loan pool marker into the contract
-        let loan_msg = withdraw_coins(
-            stablecoin,
-            loan_amount.u128(),
-            stablecoin,
-            env.contract.address,
-        )?;
+        let loan_msg = withdraw_coins(stablecoin, loan_amount, stablecoin, env.contract.address)?;
         res.add_message(loan_msg);
 
         // Update the trader's loan total
         trader_bucket(deps.storage).update(&trader_key, |opt| -> Result<_, ContractError> {
             match opt {
                 Some(mut ts) => {
-                    ts.loans += loan_amount;
+                    ts.loans += Uint128(loan_amount);
                     Ok(ts)
                 }
                 None => Err(ContractError::UnknownTrader {}),
@@ -234,8 +229,8 @@ fn try_sell_stock(
         res.add_message(loan_msg);
 
         // Determine the amount to send to the trader
-        let net = Uint128(proceeds.amount.u128() - trader_state.loans.u128());
-        let net_amount = coin(net.u128(), stablecoin);
+        let net = proceeds.amount.u128() - trader_state.loans.u128();
+        let net_amount = coin(net, stablecoin);
         let net_msg: CosmosMsg<ProvenanceMsg> = CosmosMsg::Bank(BankMsg::Send {
             amount: vec![net_amount],
             to_address: info.sender.to_string(),
@@ -324,6 +319,12 @@ fn try_get_trader_state(deps: Deps, address: String) -> Result<QueryResponse, Co
         loan_cap: trader_state.loan_cap,
     })?;
     Ok(bin)
+}
+
+/// Called when migrating a contract instance to a new code ID.
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    // For now, we do nothing
+    Ok(Response::default())
 }
 
 #[cfg(test)]

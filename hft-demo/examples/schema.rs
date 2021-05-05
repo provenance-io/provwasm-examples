@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use hft::msg::{ExecuteMsg, InitMsg, QueryMsg};
+use hft::msg::{ExecuteMsg, InitMsg, MigrateMsg, QueryMsg};
 use hft::state::{State, TraderState};
 
 fn main() {
@@ -17,4 +17,5 @@ fn main() {
     export_schema(&schema_for!(QueryMsg), &out_dir);
     export_schema(&schema_for!(State), &out_dir);
     export_schema(&schema_for!(TraderState), &out_dir);
+    export_schema(&schema_for!(MigrateMsg), &out_dir);
 }

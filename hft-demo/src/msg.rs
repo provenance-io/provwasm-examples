@@ -31,3 +31,8 @@ pub struct TraderStateResponse {
     pub loans: Uint128,
     pub loan_cap: Uint128,
 }
+
+/// Migrate the contract.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct MigrateMsg {}
