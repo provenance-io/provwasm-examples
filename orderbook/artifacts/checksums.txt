@@ -1,1 +1,1 @@
-de28928cf69d08a4bc777a928cf446e080cbdbcfa386e2e2ada3e61d2d2d2cd0  orderbook.wasm
+049db0e639ee0fe664ab301fc969b195165d5ae29a2958b12160da4d7feae5ff  orderbook.wasm
