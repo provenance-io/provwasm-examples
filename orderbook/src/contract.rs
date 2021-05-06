@@ -4,10 +4,10 @@ use cosmwasm_std::{
 };
 
 use crate::error::ContractError;
-use crate::msg::{BuyOrders, ExecuteMsg, InitMsg, Orderbook, QueryMsg, SellOrders};
+use crate::msg::{AskOrders, BidOrders, ExecuteMsg, InitMsg, Orderbook, QueryMsg};
 use crate::state::{
-    buy_orders, buy_orders_read, config, config_read, sell_orders, sell_orders_read, BuyOrder,
-    SellOrder, State,
+    ask_orders, ask_orders_read, bid_orders, bid_orders_read, config, config_read, AskOrder,
+    BidOrder, State,
 };
 
 use std::cmp::Ordering;
@@ -21,16 +21,16 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     // Create and store config state.
     let state = State {
-        sell_denom: "nhash".into(),             // nano-hash
-        sell_increment: Uint128(1_000_000_000), // 1 hash
-        buy_denom: msg.buy_denom,
+        ask_denom: "nhash".into(),             // nano-hash
+        ask_increment: Uint128(1_000_000_000), // 1 hash
+        bid_denom: msg.bid_denom,
         contract_admin: info.sender,
     };
     config(deps.storage).save(&state)?;
     Ok(Response::default())
 }
 
-/// Execute a buy or sell with automatic matching.
+/// Execute a Bid or Ask with automatic matching.
 pub fn execute(
     deps: DepsMut,
     env: Env,
@@ -38,14 +38,14 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Buy { id, price } => try_buy(deps, env, info, id, price),
-        ExecuteMsg::Sell { id, price } => try_sell(deps, env, info, id, price),
+        ExecuteMsg::Bid { id, price } => try_bid(deps, env, info, id, price),
+        ExecuteMsg::Ask { id, price } => try_ask(deps, env, info, id, price),
         ExecuteMsg::Match {} => try_match(deps, info, env),
     }
 }
 
-// Validate then persist a buy order for later matching.
-fn try_buy(
+// Validate then persist a bid order for later matching.
+fn try_bid(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -62,7 +62,7 @@ fn try_buy(
     // Ensure the correct funds where sent
     if info.funds.len() != 1 {
         return Err(ContractError::InvalidFunds {
-            message: "invalid number of buy funds provided".into(),
+            message: "invalid number of bid funds provided".into(),
         });
     }
     let funds = info.funds[0].clone();
@@ -73,63 +73,63 @@ fn try_buy(
     // Ensure the funds are valid
     if funds.amount.is_zero() {
         return Err(ContractError::InvalidFunds {
-            message: "buy amount must be > 0".into(),
+            message: "bid amount must be > 0".into(),
         });
     }
-    if funds.denom != state.buy_denom {
+    if funds.denom != state.bid_denom {
         return Err(ContractError::InvalidFunds {
             message: format!(
-                "invalid buy denom: got {}, require {}",
-                funds.denom, state.buy_denom
+                "invalid bid denom: got {}, require {}",
+                funds.denom, state.bid_denom
             ),
         });
     }
 
-    // Admin is not allowed buy hash, only execute the matching algorithm.
+    // Admin is not allowed Bid hash, only execute the matching algorithm.
     if info.sender == state.contract_admin {
         return Err(ContractError::Unauthorized {});
     }
 
     // Ensure an order with the given ID doesn't already exist.
     let order_key = id.as_bytes();
-    let mut book = buy_orders(deps.storage);
+    let mut book = bid_orders(deps.storage);
     if book.may_load(&order_key)?.is_some() {
-        return Err(ContractError::DuplicateBuy { id: id.clone() });
+        return Err(ContractError::DuplicateBid { id: id.clone() });
     }
 
     // Just assume no rounding issues for now.
-    let outstanding = funds.amount * Decimal::from_ratio(state.sell_increment.u128(), price.u128());
+    let outstanding = funds.amount * Decimal::from_ratio(state.ask_increment.u128(), price.u128());
 
-    // Validate that buy proceeds are in 1hash increments.
-    if outstanding.u128() % state.sell_increment.u128() != 0 {
+    // Validate that Bid proceeds are in 1hash increments.
+    if outstanding.u128() % state.ask_increment.u128() != 0 {
         return Err(ContractError::InvalidFunds {
-            message: "funds must yield a buy amount in 1hash increments".into(),
+            message: "funds must yield a bid amount in 1hash increments".into(),
         });
     }
 
-    // Persist buy order
+    // Persist Bid order
     book.save(
         &order_key,
-        &BuyOrder {
+        &BidOrder {
             id: id.clone(),
             price,
             ts: env.block.time.nanos() / 1_000_000_000, // use seconds
-            buyer: info.sender,
+            bidder: info.sender,
             funds: funds.amount,
-            funds_denom: state.buy_denom,
+            funds_denom: state.bid_denom,
             outstanding,
         },
     )?;
 
     // Create response and add ID to outgoing SC `wasm` event
     let mut res = Response::new();
-    res.add_attribute("action", "orderbook.buy");
+    res.add_attribute("action", "orderbook.bid");
     res.add_attribute("id", id);
     Ok(res)
 }
 
-// Validate then persist a sell order for later matching.
-fn try_sell(
+// Validate then persist a ask order for later matching.
+fn try_ask(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -146,7 +146,7 @@ fn try_sell(
     // Ensure the correct number of funds where sent.
     if info.funds.len() != 1 {
         return Err(ContractError::InvalidFunds {
-            message: "invalid number of sell funds provided".into(),
+            message: "invalid number of ask funds provided".into(),
         });
     }
     let funds = info.funds[0].clone();
@@ -155,55 +155,55 @@ fn try_sell(
     let state = config_read(deps.storage).load()?;
 
     // Ensure the funds are valid (ie at least 1 hash in 1hash increments)
-    if funds.amount.is_zero() || funds.amount.u128() % state.sell_increment.u128() != 0 {
+    if funds.amount.is_zero() || funds.amount.u128() % state.ask_increment.u128() != 0 {
         return Err(ContractError::InvalidFunds {
             message: format!(
-                "sell amount must be > 0 in {} increments: got {}",
-                state.sell_increment, funds.amount
+                "ask amount must be > 0 in {} increments: got {}",
+                state.ask_increment, funds.amount
             ),
         });
     }
-    if funds.denom != state.sell_denom {
+    if funds.denom != state.ask_denom {
         return Err(ContractError::InvalidFunds {
             message: format!(
-                "invalid sell denom: got {}, require {}",
-                funds.denom, state.buy_denom
+                "invalid ask denom: got {}, require {}",
+                funds.denom, state.bid_denom
             ),
         });
     }
 
-    // Admin is not allowed sell hash, only execute the matching algorithm.
+    // Admin is not allowed Ask hash, only execute the matching algorithm.
     if info.sender == state.contract_admin {
         return Err(ContractError::Unauthorized {});
     }
 
     // Ensure an order with the given ID doesn't already exist.
     let order_key = id.as_bytes();
-    let mut book = sell_orders(deps.storage);
+    let mut book = ask_orders(deps.storage);
     if book.may_load(&order_key)?.is_some() {
-        return Err(ContractError::DuplicateSell { id: id.clone() });
+        return Err(ContractError::DuplicateAsk { id: id.clone() });
     }
 
     // Just assume no rounding issues for now.
-    let outstanding = funds.amount * Decimal::from_ratio(price.u128(), state.sell_increment.u128());
+    let outstanding = funds.amount * Decimal::from_ratio(price.u128(), state.ask_increment.u128());
 
-    // Persist sell order
+    // Persist Ask order
     book.save(
         &order_key,
-        &SellOrder {
+        &AskOrder {
             id: id.clone(),
             price,
             ts: env.block.time.nanos() / 1_000_000_000, // use seconds
-            seller: info.sender,
+            asker: info.sender,
             funds: funds.amount,
-            funds_denom: state.sell_denom,
+            funds_denom: state.ask_denom,
             outstanding,
         },
     )?;
 
     // Create response and add ID to outgoing SC `wasm` event
     let mut res = Response::new();
-    res.add_attribute("action", "orderbook.sell");
+    res.add_attribute("action", "orderbook.ask");
     res.add_attribute("id", id);
     Ok(res)
 }
@@ -222,27 +222,27 @@ fn try_match(deps: DepsMut, info: MessageInfo, env: Env) -> Result<Response, Con
     let mut res = Response::new();
     let ts = env.block.time.nanos() / 1_000_000_000; // use seconds
 
-    // Query and filter sell orders
-    let sells: Vec<SellOrder> = get_sell_orders(deps.as_ref())?
+    // Query and filter Ask orders
+    let asks: Vec<AskOrder> = get_ask_orders(deps.as_ref())?
         .into_iter()
-        .filter(|sell| sell.ts < ts) // Ignore sells in the current block
+        .filter(|ask| ask.ts < ts) // Ignore Asks in the current block
         .collect();
 
     // Execute a single matching step.
-    for sell in sells {
-        // Create an updatable sell order
-        let mut sell = sell;
+    for ask in asks {
+        // Create an updatable Ask order
+        let mut ask = ask;
 
-        // Look for buy orders with a price >= sell price, ignoring buys in the current block.
-        let buys: Vec<BuyOrder> = get_buy_orders(deps.as_ref())?
+        // Look for Bid orders with a price >= Ask price, ignoring Bids in the current block.
+        let bids: Vec<BidOrder> = get_bid_orders(deps.as_ref())?
             .into_iter()
-            .filter(|buy| buy.price >= sell.price && buy.ts < ts)
+            .filter(|bid| bid.price >= ask.price && bid.ts < ts)
             .collect();
 
-        // Match sell with any/all buy orders
-        for buy in buys {
+        // Match Ask with any/all Bid orders
+        for bid in bids {
             // Execute match
-            let match_res = match_orders(buy, sell.clone())?;
+            let match_res = match_orders(bid, ask.clone())?;
 
             // Add bank sends to outgoing response
             for msg in match_res.msgs {
@@ -252,18 +252,18 @@ fn try_match(deps: DepsMut, info: MessageInfo, env: Env) -> Result<Response, Con
             // Add a match event attribute to outgoing response
             res.add_attribute(
                 "orderbook.match",
-                format!("buy:{},sell:{}", match_res.buy.id, match_res.sell.id),
+                format!("bid:{},ask:{}", match_res.bid.id, match_res.ask.id),
             );
 
-            // Update sell for the next iteration
-            sell = match_res.sell.clone();
+            // Update Ask for the next iteration
+            ask = match_res.ask.clone();
 
             // Persist order state
-            update_sell_order(deps.storage, match_res.sell)?;
-            update_buy_order(deps.storage, match_res.buy)?;
+            update_ask_order(deps.storage, match_res.ask)?;
+            update_bid_order(deps.storage, match_res.bid)?;
 
-            // Update sell for the next iteration and stop if sell is closed
-            if sell.is_closed() {
+            // Update Ask for the next iteration and stop if Ask is closed
+            if ask.is_closed() {
                 break;
             }
         }
@@ -275,118 +275,118 @@ fn try_match(deps: DepsMut, info: MessageInfo, env: Env) -> Result<Response, Con
 
 // The return type for matching orders
 struct MatchResult {
-    pub buy: BuyOrder,
-    pub sell: SellOrder,
+    pub bid: BidOrder,
+    pub ask: AskOrder,
     pub msgs: Vec<CosmosMsg>,
 }
 
-// Match a buy order with a sell order.
-fn match_orders(buy: BuyOrder, sell: SellOrder) -> Result<MatchResult, ContractError> {
+// Match a Bid order with a Ask order.
+fn match_orders(bid: BidOrder, ask: AskOrder) -> Result<MatchResult, ContractError> {
     // Validate orders are still open
-    if buy.is_closed() {
-        return Err(ContractError::BuyClosed {});
+    if bid.is_closed() {
+        return Err(ContractError::BidClosed {});
     }
-    if sell.is_closed() {
-        return Err(ContractError::SellClosed {});
+    if ask.is_closed() {
+        return Err(ContractError::AskClosed {});
     }
 
-    // Make sell and buy updatable
-    let mut sell = sell;
-    let mut buy = buy;
+    // Make Ask and Bid updatable
+    let mut ask = ask;
+    let mut bid = bid;
 
     // Tracks bank sends required for matching
     let mut msgs: Vec<CosmosMsg> = Vec::new();
 
-    // Process stablecoin transfer to seller
-    match sell.outstanding.cmp(&buy.funds) {
+    // Process stablecoin transfer to Asker
+    match ask.outstanding.cmp(&bid.funds) {
         Ordering::Less => {
-            // Transfer sell.outstanding funds to seller
-            let amt = coin(sell.outstanding.u128(), buy.funds_denom.clone());
+            // Transfer Ask.outstanding funds to Asker
+            let amt = coin(ask.outstanding.u128(), bid.funds_denom.clone());
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
-                    to_address: sell.seller.to_string(),
+                    to_address: ask.asker.to_string(),
                 }
                 .into(),
             );
-            // Reduce buy.funds by sell.outstanding
-            buy.funds = Uint128(buy.funds.u128() - sell.outstanding.u128());
-            // Set sell.outstanding to zero
-            sell.outstanding = Uint128::zero();
+            // Reduce Bid.funds by Ask.outstanding
+            bid.funds = Uint128(bid.funds.u128() - ask.outstanding.u128());
+            // Set Ask.outstanding to zero
+            ask.outstanding = Uint128::zero();
         }
         _ => {
-            // Transfer buy.funds to seller
-            let amt = coin(buy.funds.u128(), buy.funds_denom.clone());
+            // Transfer Bid.funds to Asker
+            let amt = coin(bid.funds.u128(), bid.funds_denom.clone());
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
-                    to_address: sell.seller.to_string(),
+                    to_address: ask.asker.to_string(),
                 }
                 .into(),
             );
-            // Reduce sell.outstanding by buy.funds
-            sell.outstanding = Uint128(sell.outstanding.u128() - buy.funds.u128());
-            // Set buy.funds to zero
-            buy.funds = Uint128::zero();
+            // Reduce Ask.outstanding by Bid.funds
+            ask.outstanding = Uint128(ask.outstanding.u128() - bid.funds.u128());
+            // Set Bid.funds to zero
+            bid.funds = Uint128::zero();
         }
     }
 
-    // Process nhash transfer to buyer
-    match buy.outstanding.cmp(&sell.funds) {
+    // Process nhash transfer to Bider
+    match bid.outstanding.cmp(&ask.funds) {
         Ordering::Less => {
-            // Transfer buy.outstanding funds to buyer
-            let amt = coin(buy.outstanding.u128(), sell.funds_denom.clone());
+            // Transfer Bid.outstanding funds to Bider
+            let amt = coin(bid.outstanding.u128(), ask.funds_denom.clone());
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
-                    to_address: buy.buyer.to_string(),
+                    to_address: bid.bidder.to_string(),
                 }
                 .into(),
             );
-            // Reduce sell.funds by buy.outstanding
-            sell.funds = Uint128(sell.funds.u128() - buy.outstanding.u128());
-            // Set buy.outstanding to zero
-            buy.outstanding = Uint128::zero();
+            // Reduce Ask.funds by Bid.outstanding
+            ask.funds = Uint128(ask.funds.u128() - bid.outstanding.u128());
+            // Set Bid.outstanding to zero
+            bid.outstanding = Uint128::zero();
         }
         _ => {
-            // Transfer sell.funds to buyer
-            let amt = coin(sell.funds.u128(), sell.funds_denom.clone());
+            // Transfer Ask.funds to Bider
+            let amt = coin(ask.funds.u128(), ask.funds_denom.clone());
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
-                    to_address: buy.buyer.to_string(),
+                    to_address: bid.bidder.to_string(),
                 }
                 .into(),
             );
-            // Reduce buy.outstanding by sell.funds
-            buy.outstanding = Uint128(buy.outstanding.u128() - sell.funds.u128());
-            // Set sell.funds to zero
-            sell.funds = Uint128::zero();
+            // Reduce Bid.outstanding by Ask.funds
+            bid.outstanding = Uint128(bid.outstanding.u128() - ask.funds.u128());
+            // Set Ask.funds to zero
+            ask.funds = Uint128::zero();
         }
     }
 
-    // If the sell ask amount was met but not all funds were required, refund them.
-    if sell.outstanding.is_zero() && !sell.funds.is_zero() {
-        let refund = coin(sell.funds.u128(), sell.funds_denom.clone());
+    // If the Ask ask amount was met but not all funds were required, refund them.
+    if ask.outstanding.is_zero() && !ask.funds.is_zero() {
+        let refund = coin(ask.funds.u128(), ask.funds_denom.clone());
         msgs.push(
             BankMsg::Send {
                 amount: vec![refund],
-                to_address: sell.seller.to_string(),
+                to_address: ask.asker.to_string(),
             }
             .into(),
         );
-        sell.funds = Uint128::zero();
+        ask.funds = Uint128::zero();
     }
 
-    Ok(MatchResult { buy, sell, msgs })
+    Ok(MatchResult { bid, ask, msgs })
 }
 
-// Update a sell order in order book storage.
-fn update_sell_order(storage: &mut dyn Storage, order: SellOrder) -> Result<(), ContractError> {
+// Update a Ask order in order book storage.
+fn update_ask_order(storage: &mut dyn Storage, order: AskOrder) -> Result<(), ContractError> {
     // Ensure an order with the given ID doesn't already exist.
     let key = order.id.as_bytes();
-    let mut book = sell_orders(storage);
-    // Persist sell order
+    let mut book = ask_orders(storage);
+    // Persist Ask order
     if order.is_closed() {
         book.remove(&key);
     } else {
@@ -395,12 +395,12 @@ fn update_sell_order(storage: &mut dyn Storage, order: SellOrder) -> Result<(), 
     Ok(())
 }
 
-// Update a buy order in order book storage.
-fn update_buy_order(storage: &mut dyn Storage, order: BuyOrder) -> Result<(), ContractError> {
+// Update a Bid order in order book storage.
+fn update_bid_order(storage: &mut dyn Storage, order: BidOrder) -> Result<(), ContractError> {
     // Ensure an order with the given ID doesn't already exist.
     let key = order.id.as_bytes();
-    let mut book = buy_orders(storage);
-    // Persist sell order
+    let mut book = bid_orders(storage);
+    // Persist Ask order
     if order.is_closed() {
         book.remove(&key);
     } else {
@@ -412,37 +412,37 @@ fn update_buy_order(storage: &mut dyn Storage, order: BuyOrder) -> Result<(), Co
 /// Query does nothing
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<QueryResponse, ContractError> {
     match msg {
-        QueryMsg::GetBuyOrders {} => try_get_buy_orders(deps),
-        QueryMsg::GetSellOrders {} => try_get_sell_orders(deps),
+        QueryMsg::GetBidOrders {} => try_get_bid_orders(deps),
+        QueryMsg::GetAskOrders {} => try_get_ask_orders(deps),
         QueryMsg::GetOrderbook {} => try_get_orderbook(deps),
     }
 }
 
-// Read all buy orders into memory, sort by amount/ts, then serialize to JSON.
-fn try_get_buy_orders(deps: Deps) -> Result<QueryResponse, ContractError> {
-    // Query sorted buy orders, checking for errors
-    let buy_orders = get_buy_orders(deps)?;
+// Read all Bid orders into memory, sort by amount/ts, then serialize to JSON.
+fn try_get_bid_orders(deps: Deps) -> Result<QueryResponse, ContractError> {
+    // Query sorted Bid orders, checking for errors
+    let bid_orders = get_bid_orders(deps)?;
     // Serialize and return
-    let bin = to_binary(&BuyOrders { buy_orders })?;
+    let bin = to_binary(&BidOrders { bid_orders })?;
     Ok(bin)
 }
 
-// Read all buy orders into memory then sort by price, timestamp.
-fn get_buy_orders(deps: Deps) -> Result<Vec<BuyOrder>, ContractError> {
-    // Read all buy orders
-    let buy_orders: StdResult<Vec<_>> = buy_orders_read(deps.storage)
+// Read all Bid orders into memory then sort by price, timestamp.
+fn get_bid_orders(deps: Deps) -> Result<Vec<BidOrder>, ContractError> {
+    // Read all Bid orders
+    let bid_orders: StdResult<Vec<_>> = bid_orders_read(deps.storage)
         .range(None, None, Order::Ascending)
         .map(|item| {
-            let (_, buy_order) = item?;
-            Ok(buy_order)
+            let (_, bid_order) = item?;
+            Ok(bid_order)
         })
         .collect();
 
     // Check for error
-    let mut buy_orders = buy_orders?;
+    let mut bid_orders = bid_orders?;
 
     // Sort by price, then time.
-    buy_orders.sort_by(|a, b| {
+    bid_orders.sort_by(|a, b| {
         if a.price != b.price {
             b.price.cmp(&a.price) // flip comparison for best price first
         } else {
@@ -451,34 +451,34 @@ fn get_buy_orders(deps: Deps) -> Result<Vec<BuyOrder>, ContractError> {
     });
 
     // Return sorted in price-time order
-    Ok(buy_orders)
+    Ok(bid_orders)
 }
 
-// Read all sell orders into memory, sort by amount/ts, then serialize to JSON.
-fn try_get_sell_orders(deps: Deps) -> Result<QueryResponse, ContractError> {
-    // Query sorted sell orders, checking for errors
-    let sell_orders = get_sell_orders(deps)?;
+// Read all Ask orders into memory, sort by amount/ts, then serialize to JSON.
+fn try_get_ask_orders(deps: Deps) -> Result<QueryResponse, ContractError> {
+    // Query sorted Ask orders, checking for errors
+    let ask_orders = get_ask_orders(deps)?;
     // Serialize and return
-    let bin = to_binary(&SellOrders { sell_orders })?;
+    let bin = to_binary(&AskOrders { ask_orders })?;
     Ok(bin)
 }
 
-// Read all sell orders into memory then sort by price, timestamp.
-fn get_sell_orders(deps: Deps) -> Result<Vec<SellOrder>, ContractError> {
-    // Read all sell orders
-    let sell_orders: StdResult<Vec<_>> = sell_orders_read(deps.storage)
+// Read all Ask orders into memory then sort by price, timestamp.
+fn get_ask_orders(deps: Deps) -> Result<Vec<AskOrder>, ContractError> {
+    // Read all Ask orders
+    let ask_orders: StdResult<Vec<_>> = ask_orders_read(deps.storage)
         .range(None, None, Order::Ascending)
         .map(|item| {
-            let (_, sell_order) = item?;
-            Ok(sell_order)
+            let (_, ask_order) = item?;
+            Ok(ask_order)
         })
         .collect();
 
     // Check for error
-    let mut sell_orders = sell_orders?;
+    let mut ask_orders = ask_orders?;
 
     // Sort by price, then time.
-    sell_orders.sort_by(|a, b| {
+    ask_orders.sort_by(|a, b| {
         if a.price != b.price {
             b.price.cmp(&a.price) // flip comparison for best price first
         } else {
@@ -487,19 +487,19 @@ fn get_sell_orders(deps: Deps) -> Result<Vec<SellOrder>, ContractError> {
     });
 
     // Return sorted in price-time order
-    Ok(sell_orders)
+    Ok(ask_orders)
 }
 
-// Read all sell orders into memory, sort by amount/ts, then serialize to JSON.
+// Read all Ask orders into memory, sort by amount/ts, then serialize to JSON.
 fn try_get_orderbook(deps: Deps) -> Result<QueryResponse, ContractError> {
-    // Query sorted buy orders, checking for errors
-    let buy_orders = get_buy_orders(deps)?;
-    // Query sorted sell orders, checking for errors
-    let sell_orders = get_sell_orders(deps)?;
+    // Query sorted Bid orders, checking for errors
+    let bid_orders = get_bid_orders(deps)?;
+    // Query sorted Ask orders, checking for errors
+    let ask_orders = get_ask_orders(deps)?;
     // Serialize and return
     let bin = to_binary(&Orderbook {
-        buy_orders,
-        sell_orders,
+        bid_orders,
+        ask_orders,
     })?;
     Ok(bin)
 }
@@ -522,7 +522,7 @@ mod tests {
             mock_env(),
             mock_info("admin", &[]),
             InitMsg {
-                buy_denom: "stablecoin".into(),
+                bid_denom: "stablecoin".into(),
             },
         )
         .unwrap();
@@ -534,13 +534,13 @@ mod tests {
         let config_state = config_read(&deps.storage).load().unwrap();
 
         // Ensure expected state values
-        assert_eq!(config_state.sell_denom, "nhash");
-        assert_eq!(config_state.sell_increment, Uint128(1_000_000_000));
-        assert_eq!(config_state.buy_denom, "stablecoin");
+        assert_eq!(config_state.ask_denom, "nhash");
+        assert_eq!(config_state.ask_increment, Uint128(1_000_000_000));
+        assert_eq!(config_state.bid_denom, "stablecoin");
     }
 
     #[test]
-    fn persist_buy_order() {
+    fn persist_bid_order() {
         // Create mock deps.
         let mut deps = mock_dependencies(&[]);
 
@@ -550,7 +550,7 @@ mod tests {
             mock_env(),
             mock_info("admin", &[]),
             InitMsg {
-                buy_denom: "stablecoin".into(),
+                bid_denom: "stablecoin".into(),
             },
         )
         .unwrap();
@@ -558,34 +558,34 @@ mod tests {
         // Ensure no messages were created.
         assert_eq!(0, res.messages.len());
 
-        // Buy 10 hash at 1 stablecoin/hash price
+        // Bid 10 hash at 1 stablecoin/hash price
         let funds = coin(10, "stablecoin");
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("buyer", &[funds]),
-            ExecuteMsg::Buy {
-                id: "test-buy".into(),
+            mock_info("bidder", &[funds]),
+            ExecuteMsg::Bid {
+                id: "test-bid".into(),
                 price: Uint128(1),
             },
         )
         .unwrap();
 
-        // Query buys from orderbook
-        let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetBuyOrders {}).unwrap();
+        // Query Bids from orderbook
+        let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetBidOrders {}).unwrap();
 
-        // Ensure buy side of orderbook has the expected state
-        let rep: BuyOrders = from_binary(&bin).unwrap();
+        // Ensure Bid side of orderbook has the expected state
+        let rep: BidOrders = from_binary(&bin).unwrap();
         deps.api.debug(&format!("{:?}", rep));
-        assert_eq!(rep.buy_orders.len(), 1);
-        assert_eq!(rep.buy_orders[0].id, "test-buy");
-        assert_eq!(rep.buy_orders[0].price, Uint128(1));
-        assert_eq!(rep.buy_orders[0].funds, Uint128(10));
-        assert_eq!(rep.buy_orders[0].outstanding, Uint128(10_000_000_000));
+        assert_eq!(rep.bid_orders.len(), 1);
+        assert_eq!(rep.bid_orders[0].id, "test-bid");
+        assert_eq!(rep.bid_orders[0].price, Uint128(1));
+        assert_eq!(rep.bid_orders[0].funds, Uint128(10));
+        assert_eq!(rep.bid_orders[0].outstanding, Uint128(10_000_000_000));
     }
 
     #[test]
-    fn persist_sell_order() {
+    fn persist_ask_order() {
         // Create mock deps.
         let mut deps = mock_dependencies(&[]);
 
@@ -595,7 +595,7 @@ mod tests {
             mock_env(),
             mock_info("admin", &[]),
             InitMsg {
-                buy_denom: "stablecoin".into(),
+                bid_denom: "stablecoin".into(),
             },
         )
         .unwrap();
@@ -603,30 +603,30 @@ mod tests {
         // Ensure no messages were created.
         assert_eq!(0, res.messages.len());
 
-        // Sell 10 hash at 1 stablecoin/hash price
+        // Ask 10 hash at 1 stablecoin/hash price
         let funds = coin(10_000_000_000, "nhash");
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("seller", &[funds]),
-            ExecuteMsg::Sell {
-                id: "test-sell".into(),
+            mock_info("asker", &[funds]),
+            ExecuteMsg::Ask {
+                id: "test-ask".into(),
                 price: Uint128(1),
             },
         )
         .unwrap();
 
-        // Query sells from orderbook
-        let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetSellOrders {}).unwrap();
+        // Query Asks from orderbook
+        let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetAskOrders {}).unwrap();
 
-        // Ensure buy side of orderbook has the expected state
-        let rep: SellOrders = from_binary(&bin).unwrap();
+        // Ensure Bid side of orderbook has the expected state
+        let rep: AskOrders = from_binary(&bin).unwrap();
         deps.api.debug(&format!("{:?}", rep));
-        assert_eq!(rep.sell_orders.len(), 1);
-        assert_eq!(rep.sell_orders[0].id, "test-sell");
-        assert_eq!(rep.sell_orders[0].price, Uint128(1));
-        assert_eq!(rep.sell_orders[0].funds, Uint128(10_000_000_000));
-        assert_eq!(rep.sell_orders[0].outstanding, Uint128(10));
+        assert_eq!(rep.ask_orders.len(), 1);
+        assert_eq!(rep.ask_orders[0].id, "test-ask");
+        assert_eq!(rep.ask_orders[0].price, Uint128(1));
+        assert_eq!(rep.ask_orders[0].funds, Uint128(10_000_000_000));
+        assert_eq!(rep.ask_orders[0].outstanding, Uint128(10));
     }
 
     #[test]
@@ -640,7 +640,7 @@ mod tests {
             mock_env(),
             mock_info("admin", &[]),
             InitMsg {
-                buy_denom: "stablecoin".into(),
+                bid_denom: "stablecoin".into(),
             },
         )
         .unwrap();
@@ -648,27 +648,27 @@ mod tests {
         // Ensure no messages were created.
         assert_eq!(0, res.messages.len());
 
-        // Buy 10 hash at 1 stablecoin/hash price
+        // Bid 10 hash at 1 stablecoin/hash price
         let funds = coin(10, "stablecoin");
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("buyer", &[funds]),
-            ExecuteMsg::Buy {
-                id: "test-buy".into(),
+            mock_info("bidder", &[funds]),
+            ExecuteMsg::Bid {
+                id: "test-bid".into(),
                 price: Uint128(1),
             },
         )
         .unwrap();
 
-        // Sell 10 hash at 1 stablecoin/hash price
+        // Ask 10 hash at 1 stablecoin/hash price
         let funds = coin(10_000_000_000, "nhash");
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("seller", &[funds]),
-            ExecuteMsg::Sell {
-                id: "test-sell".into(),
+            mock_info("asker", &[funds]),
+            ExecuteMsg::Ask {
+                id: "test-ask".into(),
                 price: Uint128(1),
             },
         )
@@ -679,8 +679,8 @@ mod tests {
 
         // Ensure both orders were added to the orderbook.
         let rep: Orderbook = from_binary(&bin).unwrap();
-        assert_eq!(rep.buy_orders.len(), 1);
-        assert_eq!(rep.sell_orders.len(), 1);
+        assert_eq!(rep.bid_orders.len(), 1);
+        assert_eq!(rep.ask_orders.len(), 1);
 
         deps.api.debug(&format!("{:?}", rep));
 
@@ -706,13 +706,13 @@ mod tests {
                 amount, to_address, ..
             }) => {
                 assert_eq!(amount.len(), 1);
-                if to_address == Addr::unchecked("seller") {
-                    let expected_seller_amount = coin(10, "stablecoin");
-                    assert_eq!(amount[0], expected_seller_amount);
+                if to_address == Addr::unchecked("asker") {
+                    let expected_asker_amount = coin(10, "stablecoin");
+                    assert_eq!(amount[0], expected_asker_amount);
                 } else {
-                    assert_eq!(to_address, "buyer");
-                    let expected_buyer_amount = coin(10_000_000_000, "nhash");
-                    assert_eq!(amount[0], expected_buyer_amount);
+                    assert_eq!(to_address, "bidder");
+                    let expected_bidder_amount = coin(10_000_000_000, "nhash");
+                    assert_eq!(amount[0], expected_bidder_amount);
                 }
             }
             _ => panic!("unexpected message type"),
@@ -721,17 +721,17 @@ mod tests {
         // Ensure we got one match event attribute
         assert_eq!(res.attributes.len(), 1);
         assert_eq!(res.attributes[0].key, "orderbook.match");
-        assert_eq!(res.attributes[0].value, "buy:test-buy,sell:test-sell");
+        assert_eq!(res.attributes[0].value, "bid:test-bid,ask:test-ask");
 
         // Ensure both orders were removed from the orderbook.
         let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
         let rep: Orderbook = from_binary(&bin).unwrap();
-        assert_eq!(rep.buy_orders.len(), 0);
-        assert_eq!(rep.sell_orders.len(), 0);
+        assert_eq!(rep.bid_orders.len(), 0);
+        assert_eq!(rep.ask_orders.len(), 0);
     }
 
     #[test]
-    fn partial_match_buy() {
+    fn partial_match_bid() {
         // Create mock deps.
         let mut deps = mock_dependencies(&[]);
 
@@ -741,7 +741,7 @@ mod tests {
             mock_env(),
             mock_info("admin", &[]),
             InitMsg {
-                buy_denom: "stablecoin".into(),
+                bid_denom: "stablecoin".into(),
             },
         )
         .unwrap();
@@ -749,27 +749,27 @@ mod tests {
         // Ensure no messages were created.
         assert_eq!(0, res.messages.len());
 
-        // Buy 10 hash at 1 stablecoin/hash price
+        // Bid 10 hash at 1 stablecoin/hash price
         let funds = coin(10, "stablecoin");
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("buyer", &[funds]),
-            ExecuteMsg::Buy {
-                id: "test-buy".into(),
+            mock_info("bidder", &[funds]),
+            ExecuteMsg::Bid {
+                id: "test-bid".into(),
                 price: Uint128(1),
             },
         )
         .unwrap();
 
-        // Sell 5 hash at 1 stablecoin/hash price
+        // Ask 5 hash at 1 stablecoin/hash price
         let funds = coin(5_000_000_000, "nhash");
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("seller", &[funds]),
-            ExecuteMsg::Sell {
-                id: "test-sell".into(),
+            mock_info("asker", &[funds]),
+            ExecuteMsg::Ask {
+                id: "test-ask".into(),
                 price: Uint128(1),
             },
         )
@@ -780,8 +780,8 @@ mod tests {
 
         // Ensure both orders were added to the orderbook.
         let rep: Orderbook = from_binary(&bin).unwrap();
-        assert_eq!(rep.buy_orders.len(), 1);
-        assert_eq!(rep.sell_orders.len(), 1);
+        assert_eq!(rep.bid_orders.len(), 1);
+        assert_eq!(rep.ask_orders.len(), 1);
 
         deps.api.debug(&format!("{:?}", rep));
 
@@ -807,11 +807,11 @@ mod tests {
                 amount, to_address, ..
             }) => {
                 assert_eq!(amount.len(), 1);
-                if to_address == Addr::unchecked("seller") {
+                if to_address == Addr::unchecked("asker") {
                     let expected_amount = coin(5, "stablecoin");
                     assert_eq!(amount[0], expected_amount);
                 } else {
-                    assert_eq!(to_address, "buyer");
+                    assert_eq!(to_address, "bidder");
                     let expected_amount = coin(5_000_000_000, "nhash");
                     assert_eq!(amount[0], expected_amount);
                 }
@@ -822,23 +822,23 @@ mod tests {
         // Ensure we got one match event attribute
         assert_eq!(res.attributes.len(), 1);
         assert_eq!(res.attributes[0].key, "orderbook.match");
-        assert_eq!(res.attributes[0].value, "buy:test-buy,sell:test-sell");
+        assert_eq!(res.attributes[0].value, "bid:test-bid,ask:test-ask");
 
-        // Ensure the buy order was updated in the orderbook.
+        // Ensure the Bid order was updated in the orderbook.
         let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
         let rep: Orderbook = from_binary(&bin).unwrap();
-        assert_eq!(rep.buy_orders.len(), 1);
-        assert_eq!(rep.sell_orders.len(), 0);
+        assert_eq!(rep.bid_orders.len(), 1);
+        assert_eq!(rep.ask_orders.len(), 0);
 
-        // Verfiy there are still 5 hash outstanding in the buy order
-        assert_eq!(rep.buy_orders[0].id, "test-buy");
-        assert_eq!(rep.buy_orders[0].price, Uint128(1));
-        assert_eq!(rep.buy_orders[0].funds, Uint128(5));
-        assert_eq!(rep.buy_orders[0].outstanding, Uint128(5_000_000_000));
+        // Verfiy there are still 5 hash outstanding in the Bid order
+        assert_eq!(rep.bid_orders[0].id, "test-bid");
+        assert_eq!(rep.bid_orders[0].price, Uint128(1));
+        assert_eq!(rep.bid_orders[0].funds, Uint128(5));
+        assert_eq!(rep.bid_orders[0].outstanding, Uint128(5_000_000_000));
     }
 
     #[test]
-    fn partial_match_sell() {
+    fn partial_match_ask() {
         // Create mock deps.
         let mut deps = mock_dependencies(&[]);
 
@@ -848,7 +848,7 @@ mod tests {
             mock_env(),
             mock_info("admin", &[]),
             InitMsg {
-                buy_denom: "stablecoin".into(),
+                bid_denom: "stablecoin".into(),
             },
         )
         .unwrap();
@@ -856,27 +856,27 @@ mod tests {
         // Ensure no messages were created.
         assert_eq!(0, res.messages.len());
 
-        // Buy 5 hash at 1 stablecoin/hash price
+        // Bid 5 hash at 1 stablecoin/hash price
         let funds = coin(5, "stablecoin");
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("buyer", &[funds]),
-            ExecuteMsg::Buy {
-                id: "test-buy".into(),
+            mock_info("bidder", &[funds]),
+            ExecuteMsg::Bid {
+                id: "test-bid".into(),
                 price: Uint128(1),
             },
         )
         .unwrap();
 
-        // Sell 10 hash at 1 stablecoin/hash price
+        // Ask 10 hash at 1 stablecoin/hash price
         let funds = coin(10_000_000_000, "nhash");
         execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("seller", &[funds]),
-            ExecuteMsg::Sell {
-                id: "test-sell".into(),
+            mock_info("asker", &[funds]),
+            ExecuteMsg::Ask {
+                id: "test-ask".into(),
                 price: Uint128(1),
             },
         )
@@ -887,8 +887,8 @@ mod tests {
 
         // Ensure both orders were added to the orderbook.
         let rep: Orderbook = from_binary(&bin).unwrap();
-        assert_eq!(rep.buy_orders.len(), 1);
-        assert_eq!(rep.sell_orders.len(), 1);
+        assert_eq!(rep.bid_orders.len(), 1);
+        assert_eq!(rep.ask_orders.len(), 1);
 
         deps.api.debug(&format!("{:?}", rep));
 
@@ -914,11 +914,11 @@ mod tests {
                 amount, to_address, ..
             }) => {
                 assert_eq!(amount.len(), 1);
-                if to_address == Addr::unchecked("seller") {
+                if to_address == Addr::unchecked("asker") {
                     let expected_amount = coin(5, "stablecoin");
                     assert_eq!(amount[0], expected_amount);
                 } else {
-                    assert_eq!(to_address, "buyer");
+                    assert_eq!(to_address, "bidder");
                     let expected_amount = coin(5_000_000_000, "nhash");
                     assert_eq!(amount[0], expected_amount);
                 }
@@ -929,23 +929,23 @@ mod tests {
         // Ensure we got one match event attribute
         assert_eq!(res.attributes.len(), 1);
         assert_eq!(res.attributes[0].key, "orderbook.match");
-        assert_eq!(res.attributes[0].value, "buy:test-buy,sell:test-sell");
+        assert_eq!(res.attributes[0].value, "bid:test-bid,ask:test-ask");
 
-        // Ensure the sell order was updated in the orderbook.
+        // Ensure the Ask order was updated in the orderbook.
         let bin = query(deps.as_ref(), mock_env(), QueryMsg::GetOrderbook {}).unwrap();
         let rep: Orderbook = from_binary(&bin).unwrap();
-        assert_eq!(rep.buy_orders.len(), 0);
-        assert_eq!(rep.sell_orders.len(), 1);
+        assert_eq!(rep.bid_orders.len(), 0);
+        assert_eq!(rep.ask_orders.len(), 1);
 
-        // Verify there are still 5 stablecoin outstanding in the sell order
-        assert_eq!(rep.sell_orders[0].id, "test-sell");
-        assert_eq!(rep.sell_orders[0].price, Uint128(1));
-        assert_eq!(rep.sell_orders[0].funds, Uint128(5_000_000_000));
-        assert_eq!(rep.sell_orders[0].outstanding, Uint128(5));
+        // Verify there are still 5 stablecoin outstanding in the Ask order
+        assert_eq!(rep.ask_orders[0].id, "test-ask");
+        assert_eq!(rep.ask_orders[0].price, Uint128(1));
+        assert_eq!(rep.ask_orders[0].funds, Uint128(5_000_000_000));
+        assert_eq!(rep.ask_orders[0].outstanding, Uint128(5));
     }
 
     #[test]
-    fn unauthorized_buy() {
+    fn unauthorized_bid() {
         // Create mock deps.
         let mut deps = mock_dependencies(&[]);
 
@@ -955,19 +955,19 @@ mod tests {
             mock_env(),
             mock_info("admin", &[]),
             InitMsg {
-                buy_denom: "stablecoin".into(),
+                bid_denom: "stablecoin".into(),
             },
         )
         .unwrap();
 
-        // Buy 5 hash at 1 stablecoin/hash price
+        // Bid 5 hash at 1 stablecoin/hash price
         let funds = coin(5, "stablecoin");
         let err = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("admin", &[funds]), // Admin cannot place buy orders
-            ExecuteMsg::Buy {
-                id: "test-buy".into(),
+            mock_info("admin", &[funds]), // Admin cannot place Bid orders
+            ExecuteMsg::Bid {
+                id: "test-bid".into(),
                 price: Uint128(1),
             },
         )
@@ -981,7 +981,7 @@ mod tests {
     }
 
     #[test]
-    fn unauthorized_sell() {
+    fn unauthorized_ask() {
         // Create mock deps.
         let mut deps = mock_dependencies(&[]);
 
@@ -991,19 +991,19 @@ mod tests {
             mock_env(),
             mock_info("admin", &[]),
             InitMsg {
-                buy_denom: "stablecoin".into(),
+                bid_denom: "stablecoin".into(),
             },
         )
         .unwrap();
 
-        // Sell 10 hash at 1 stablecoin/hash price
-        let funds = coin(10000000000, "nhash");
+        // Ask 10 hash at 1 stablecoin/hash price
+        let funds = coin(10_000_000_000, "nhash");
         let err = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("admin", &[funds]), // Admin cannot place sell orders
-            ExecuteMsg::Sell {
-                id: "test-sell".into(),
+            mock_info("admin", &[funds]), // Admin cannot place Ask orders
+            ExecuteMsg::Ask {
+                id: "test-ask".into(),
                 price: Uint128(1),
             },
         )
@@ -1027,7 +1027,7 @@ mod tests {
             mock_env(),
             mock_info("admin", &[]),
             InitMsg {
-                buy_denom: "stablecoin".into(),
+                bid_denom: "stablecoin".into(),
             },
         )
         .unwrap();
@@ -1039,7 +1039,7 @@ mod tests {
         let err = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("seller", &[]), // Admin must execute match
+            mock_info("asker", &[]), // Admin must execute match
             ExecuteMsg::Match {},
         )
         .unwrap_err();
@@ -1052,7 +1052,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_buy_amount() {
+    fn invalid_bid_amount() {
         // Create mock deps.
         let mut deps = mock_dependencies(&[]);
 
@@ -1062,7 +1062,7 @@ mod tests {
             mock_env(),
             mock_info("admin", &[]),
             InitMsg {
-                buy_denom: "stablecoin".into(),
+                bid_denom: "stablecoin".into(),
             },
         )
         .unwrap();
@@ -1070,14 +1070,14 @@ mod tests {
         // Ensure no messages were created.
         assert_eq!(0, res.messages.len());
 
-        // Attempt to buy 1 hash at 15 stablecoin/hash price
+        // Attempt to Bid 1 hash at 15 stablecoin/hash price
         let funds = coin(1, "stablecoin");
         let err = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("buyer", &[funds]),
-            ExecuteMsg::Buy {
-                id: "test-buy".into(),
+            mock_info("bidder", &[funds]),
+            ExecuteMsg::Bid {
+                id: "test-bid".into(),
                 price: Uint128(15),
             },
         )
@@ -1086,14 +1086,14 @@ mod tests {
         // Ensure we go the expected error
         match err {
             ContractError::InvalidFunds { message } => {
-                assert_eq!(message, "funds must yield a buy amount in 1hash increments")
+                assert_eq!(message, "funds must yield a bid amount in 1hash increments")
             }
             _ => panic!("unexpected error type"),
         }
     }
 
     #[test]
-    fn invalid_sell_amount() {
+    fn invalid_ask_amount() {
         // Create mock deps.
         let mut deps = mock_dependencies(&[]);
 
@@ -1103,7 +1103,7 @@ mod tests {
             mock_env(),
             mock_info("admin", &[]),
             InitMsg {
-                buy_denom: "stablecoin".into(),
+                bid_denom: "stablecoin".into(),
             },
         )
         .unwrap();
@@ -1111,14 +1111,14 @@ mod tests {
         // Ensure no messages were created.
         assert_eq!(0, res.messages.len());
 
-        // Sell < 1 hash at 1 stablecoin/hash price
+        // Ask < 1 hash at 1 stablecoin/hash price
         let funds = coin(123456789, "nhash");
         let err = execute(
             deps.as_mut(),
             mock_env(),
-            mock_info("seller", &[funds]),
-            ExecuteMsg::Sell {
-                id: "test-sell".into(),
+            mock_info("asker", &[funds]),
+            ExecuteMsg::Ask {
+                id: "test-ask".into(),
                 price: Uint128(1),
             },
         )
@@ -1128,7 +1128,7 @@ mod tests {
         match err {
             ContractError::InvalidFunds { message } => assert_eq!(
                 message,
-                "sell amount must be > 0 in 1000000000 increments: got 123456789"
+                "ask amount must be > 0 in 1000000000 increments: got 123456789"
             ),
             _ => panic!("unexpected error type"),
         }

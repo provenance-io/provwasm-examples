@@ -3,23 +3,23 @@
   "title": "State",
   "type": "object",
   "required": [
-    "buy_denom",
-    "contract_admin",
-    "sell_denom",
-    "sell_increment"
+    "ask_denom",
+    "ask_increment",
+    "bid_denom",
+    "contract_admin"
   ],
   "properties": {
-    "buy_denom": {
+    "ask_denom": {
+      "type": "string"
+    },
+    "ask_increment": {
+      "$ref": "#/definitions/Uint128"
+    },
+    "bid_denom": {
       "type": "string"
     },
     "contract_admin": {
       "$ref": "#/definitions/Addr"
-    },
-    "sell_denom": {
-      "type": "string"
-    },
-    "sell_increment": {
-      "$ref": "#/definitions/Uint128"
     }
   },
   "definitions": {

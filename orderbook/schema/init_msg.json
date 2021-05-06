@@ -3,10 +3,10 @@
   "title": "InitMsg",
   "type": "object",
   "required": [
-    "buy_denom"
+    "bid_denom"
   ],
   "properties": {
-    "buy_denom": {
+    "bid_denom": {
       "type": "string"
     }
   }

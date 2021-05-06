@@ -1,10 +1,10 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "BuyOrder",
-  "description": "Persisted buy order.",
+  "title": "AskOrder",
+  "description": "Persisted ask order.",
   "type": "object",
   "required": [
-    "buyer",
+    "asker",
     "funds",
     "funds_denom",
     "id",
@@ -13,7 +13,7 @@
     "ts"
   ],
   "properties": {
-    "buyer": {
+    "asker": {
       "$ref": "#/definitions/Addr"
     },
     "funds": {

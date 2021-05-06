@@ -1,44 +1,44 @@
-use crate::state::{BuyOrder, SellOrder};
+use crate::state::{AskOrder, BidOrder};
 use cosmwasm_std::Uint128;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
-    pub buy_denom: String,
+    pub bid_denom: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    Buy { id: String, price: Uint128 }, // Number of stablecoins offered for 1 hash
-    Sell { id: String, price: Uint128 }, // Number of stablecoins requested for 1 hash
-    Match {},                           // Match each sell to >= 1 buys
+    Bid { id: String, price: Uint128 }, // Number of stablecoins offered for 1 hash
+    Ask { id: String, price: Uint128 }, // Number of stablecoins requested for 1 hash
+    Match {},                           // Match each ask to >= 1 bids
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    GetBuyOrders {},
-    GetSellOrders {},
+    GetBidOrders {},
+    GetAskOrders {},
     GetOrderbook {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub struct BuyOrders {
-    pub buy_orders: Vec<BuyOrder>,
+pub struct BidOrders {
+    pub bid_orders: Vec<BidOrder>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub struct SellOrders {
-    pub sell_orders: Vec<SellOrder>,
+pub struct AskOrders {
+    pub ask_orders: Vec<AskOrder>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct Orderbook {
-    pub buy_orders: Vec<BuyOrder>,
-    pub sell_orders: Vec<SellOrder>,
+    pub bid_orders: Vec<BidOrder>,
+    pub ask_orders: Vec<AskOrder>,
 }

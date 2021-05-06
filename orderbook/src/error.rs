@@ -12,18 +12,18 @@ pub enum ContractError {
     #[error("InvalidPrice: {message:?}")]
     InvalidPrice { message: String },
 
-    #[error("DuplicateBuy: {id:?}")]
-    DuplicateBuy { id: String },
+    #[error("DuplicateBid: {id:?}")]
+    DuplicateBid { id: String },
 
-    #[error("DuplicateSell: {id:?}")]
-    DuplicateSell { id: String },
+    #[error("DuplicateAsk: {id:?}")]
+    DuplicateAsk { id: String },
 
     #[error("InvalidFunds: {message:?}")]
     InvalidFunds { message: String },
 
-    #[error("SellClosed")]
-    SellClosed {},
+    #[error("AskClosed")]
+    AskClosed {},
 
-    #[error("BuyAlreadyClosed")]
-    BuyClosed {},
+    #[error("BidClosed")]
+    BidClosed {},
 }
