@@ -97,11 +97,12 @@ fn try_bid(
         return Err(ContractError::DuplicateBid { id: id.clone() });
     }
 
-    // Just assume no rounding issues for now.
-    let outstanding = funds.amount * Decimal::from_ratio(state.ask_increment.u128(), price.u128());
+    // Calculate buy proceeds.
+    let proceeds = funds.amount * Decimal::from_ratio(state.ask_increment, price);
 
-    // Validate that bid proceeds are in 1hash increments.
-    if outstanding.u128() % state.ask_increment.u128() != 0 {
+    // Validate that proceeds are in 1hash increments.
+    if proceeds.u128() % state.ask_increment.u128() != 0 {
+        deps.api.debug(&format!("proceeds={:?}", proceeds));
         return Err(ContractError::InvalidFunds {
             message: "funds must yield a bid amount in 1hash increments".into(),
         });
@@ -116,8 +117,8 @@ fn try_bid(
             ts: env.block.time.nanos() / 1_000_000_000, // use seconds
             bidder: info.sender,
             funds: funds.amount,
-            funds_denom: state.bid_denom,
-            outstanding,
+            funds_denom: funds.denom,
+            proceeds,
         },
     )?;
 
@@ -158,8 +159,8 @@ fn try_ask(
     if funds.amount.is_zero() || funds.amount.u128() % state.ask_increment.u128() != 0 {
         return Err(ContractError::InvalidFunds {
             message: format!(
-                "ask amount must be > 0 in {} increments: got {}",
-                state.ask_increment, funds.amount
+                "ask amount must be > 0 in 1hash increments: got {}",
+                funds.amount
             ),
         });
     }
@@ -184,8 +185,8 @@ fn try_ask(
         return Err(ContractError::DuplicateAsk { id: id.clone() });
     }
 
-    // Just assume no rounding issues for now.
-    let outstanding = funds.amount * Decimal::from_ratio(price.u128(), state.ask_increment.u128());
+    // Calculate sell proceeds
+    let proceeds = funds.amount * Decimal::from_ratio(price, state.ask_increment);
 
     // Persist ask order
     book.save(
@@ -196,8 +197,8 @@ fn try_ask(
             ts: env.block.time.nanos() / 1_000_000_000, // use seconds
             asker: info.sender,
             funds: funds.amount,
-            funds_denom: state.ask_denom,
-            outstanding,
+            funds_denom: funds.denom,
+            proceeds,
         },
     )?;
 
@@ -298,10 +299,10 @@ fn match_orders(bid: BidOrder, ask: AskOrder) -> Result<MatchResult, ContractErr
     let mut msgs: Vec<CosmosMsg> = Vec::new();
 
     // Process stablecoin transfer to asker
-    match ask.outstanding.cmp(&bid.funds) {
+    match ask.proceeds.cmp(&bid.funds) {
         Ordering::Less => {
-            // Transfer ask.outstanding funds to asker
-            let amt = coin(ask.outstanding.u128(), bid.funds_denom.clone());
+            // Transfer ask.proceeds funds to asker
+            let amt = coin(ask.proceeds.u128(), bid.funds_denom.clone());
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
@@ -309,10 +310,10 @@ fn match_orders(bid: BidOrder, ask: AskOrder) -> Result<MatchResult, ContractErr
                 }
                 .into(),
             );
-            // Reduce bid.funds by ask.outstanding
-            bid.funds = Uint128(bid.funds.u128() - ask.outstanding.u128());
-            // Set ask.outstanding to zero
-            ask.outstanding = Uint128::zero();
+            // Reduce bid.funds by ask.proceeds
+            bid.funds = Uint128(bid.funds.u128() - ask.proceeds.u128());
+            // Set ask.proceeds to zero
+            ask.proceeds = Uint128::zero();
         }
         _ => {
             // Transfer bid.funds to asker
@@ -324,18 +325,18 @@ fn match_orders(bid: BidOrder, ask: AskOrder) -> Result<MatchResult, ContractErr
                 }
                 .into(),
             );
-            // Reduce ask.outstanding by bid.funds
-            ask.outstanding = Uint128(ask.outstanding.u128() - bid.funds.u128());
+            // Reduce ask.proceeds by bid.funds
+            ask.proceeds = Uint128(ask.proceeds.u128() - bid.funds.u128());
             // Set bid.funds to zero
             bid.funds = Uint128::zero();
         }
     }
 
     // Process nhash transfer to bidder
-    match bid.outstanding.cmp(&ask.funds) {
+    match bid.proceeds.cmp(&ask.funds) {
         Ordering::Less => {
-            // Transfer bid.outstanding funds to bidder
-            let amt = coin(bid.outstanding.u128(), ask.funds_denom.clone());
+            // Transfer bid.proceeds funds to bidder
+            let amt = coin(bid.proceeds.u128(), ask.funds_denom.clone());
             msgs.push(
                 BankMsg::Send {
                     amount: vec![amt],
@@ -343,10 +344,10 @@ fn match_orders(bid: BidOrder, ask: AskOrder) -> Result<MatchResult, ContractErr
                 }
                 .into(),
             );
-            // Reduce ask.funds by bid.outstanding
-            ask.funds = Uint128(ask.funds.u128() - bid.outstanding.u128());
-            // Set bid.outstanding to zero
-            bid.outstanding = Uint128::zero();
+            // Reduce ask.funds by bid.proceeds
+            ask.funds = Uint128(ask.funds.u128() - bid.proceeds.u128());
+            // Set bid.proceeds to zero
+            bid.proceeds = Uint128::zero();
         }
         _ => {
             // Transfer ask.funds to bidder
@@ -358,15 +359,15 @@ fn match_orders(bid: BidOrder, ask: AskOrder) -> Result<MatchResult, ContractErr
                 }
                 .into(),
             );
-            // Reduce bid.outstanding by ask.funds
-            bid.outstanding = Uint128(bid.outstanding.u128() - ask.funds.u128());
+            // Reduce bid.proceeds by ask.funds
+            bid.proceeds = Uint128(bid.proceeds.u128() - ask.funds.u128());
             // Set ask.funds to zero
             ask.funds = Uint128::zero();
         }
     }
 
     // If the ask amount was met but not all funds were required, refund them.
-    if ask.outstanding.is_zero() && !ask.funds.is_zero() {
+    if ask.proceeds.is_zero() && !ask.funds.is_zero() {
         let refund = coin(ask.funds.u128(), ask.funds_denom.clone());
         msgs.push(
             BankMsg::Send {
@@ -578,7 +579,7 @@ mod tests {
         assert_eq!(rep.bid_orders[0].id, "test-bid");
         assert_eq!(rep.bid_orders[0].price, Uint128(1));
         assert_eq!(rep.bid_orders[0].funds, Uint128(10));
-        assert_eq!(rep.bid_orders[0].outstanding, Uint128(10_000_000_000));
+        assert_eq!(rep.bid_orders[0].proceeds, Uint128(10_000_000_000));
     }
 
     #[test]
@@ -620,7 +621,7 @@ mod tests {
         assert_eq!(rep.ask_orders[0].id, "test-ask");
         assert_eq!(rep.ask_orders[0].price, Uint128(1));
         assert_eq!(rep.ask_orders[0].funds, Uint128(10_000_000_000));
-        assert_eq!(rep.ask_orders[0].outstanding, Uint128(10));
+        assert_eq!(rep.ask_orders[0].proceeds, Uint128(10));
     }
 
     #[test]
@@ -818,11 +819,11 @@ mod tests {
         assert_eq!(rep.bid_orders.len(), 1);
         assert_eq!(rep.ask_orders.len(), 0);
 
-        // Verfiy there are still 5 hash outstanding in the bid order
+        // Verfiy there are still 5 hash proceeds in the bid order
         assert_eq!(rep.bid_orders[0].id, "test-bid");
         assert_eq!(rep.bid_orders[0].price, Uint128(1));
         assert_eq!(rep.bid_orders[0].funds, Uint128(5));
-        assert_eq!(rep.bid_orders[0].outstanding, Uint128(5_000_000_000));
+        assert_eq!(rep.bid_orders[0].proceeds, Uint128(5_000_000_000));
     }
 
     #[test]
@@ -922,11 +923,11 @@ mod tests {
         assert_eq!(rep.bid_orders.len(), 0);
         assert_eq!(rep.ask_orders.len(), 1);
 
-        // Verify there are still 5 stablecoin outstanding in the ask order
+        // Verify there are still 5 stablecoin proceeds in the ask order
         assert_eq!(rep.ask_orders[0].id, "test-ask");
         assert_eq!(rep.ask_orders[0].price, Uint128(1));
         assert_eq!(rep.ask_orders[0].funds, Uint128(5_000_000_000));
-        assert_eq!(rep.ask_orders[0].outstanding, Uint128(5));
+        assert_eq!(rep.ask_orders[0].proceeds, Uint128(5));
     }
 
     #[test]
@@ -1104,7 +1105,7 @@ mod tests {
         match err {
             ContractError::InvalidFunds { message } => assert_eq!(
                 message,
-                "ask amount must be > 0 in 1000000000 increments: got 123456789"
+                "ask amount must be > 0 in 1hash increments: got 123456789"
             ),
             _ => panic!("unexpected error type"),
         }

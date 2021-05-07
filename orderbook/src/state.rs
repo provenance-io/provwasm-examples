@@ -28,12 +28,12 @@ pub struct BidOrder {
     pub bidder: Addr,
     pub funds: Uint128, // The stablecoin available for transfer
     pub funds_denom: String,
-    pub outstanding: Uint128, // The outstanding proceeds for the bid
+    pub proceeds: Uint128, // The proceeds for the bid
 }
 
 impl BidOrder {
     pub fn is_closed(&self) -> bool {
-        self.outstanding.is_zero() && self.funds.is_zero()
+        self.proceeds.is_zero() && self.funds.is_zero()
     }
 }
 
@@ -46,12 +46,12 @@ pub struct AskOrder {
     pub asker: Addr,
     pub funds: Uint128, // The nhash available for transfer
     pub funds_denom: String,
-    pub outstanding: Uint128, // The outstanding proceeds for the ask
+    pub proceeds: Uint128, // The proceeds for the ask
 }
 
 impl AskOrder {
     pub fn is_closed(&self) -> bool {
-        self.outstanding.is_zero() && self.funds.is_zero()
+        self.proceeds.is_zero() && self.funds.is_zero()
     }
 }
 

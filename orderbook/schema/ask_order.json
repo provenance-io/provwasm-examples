@@ -8,8 +8,8 @@
     "funds",
     "funds_denom",
     "id",
-    "outstanding",
     "price",
+    "proceeds",
     "ts"
   ],
   "properties": {
@@ -25,10 +25,10 @@
     "id": {
       "type": "string"
     },
-    "outstanding": {
+    "price": {
       "$ref": "#/definitions/Uint128"
     },
-    "price": {
+    "proceeds": {
       "$ref": "#/definitions/Uint128"
     },
     "ts": {
