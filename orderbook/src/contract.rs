@@ -97,10 +97,14 @@ fn try_bid(
         return Err(ContractError::DuplicateBid { id: id.clone() });
     }
 
-    // Calculate buy proceeds.
-    let proceeds = funds.amount * Decimal::from_ratio(state.ask_increment, price);
-
-    // Validate that proceeds are in 1hash increments.
+    // Calculate and verify buy proceeds.
+    let num = funds.amount.u128() * state.ask_increment.u128();
+    if num % price.u128() != 0 {
+        return Err(ContractError::InvalidFunds {
+            message: "bid price must yield an integral for proceeds".into(),
+        });
+    }
+    let proceeds = Uint128(num / price.u128());
     if proceeds.u128() % state.ask_increment.u128() != 0 {
         deps.api.debug(&format!("proceeds={:?}", proceeds));
         return Err(ContractError::InvalidFunds {
@@ -229,7 +233,7 @@ fn try_match(deps: DepsMut, info: MessageInfo, env: Env) -> Result<Response, Con
         .filter(|ask| ask.ts < ts) // Ignore asks in the current block
         .collect();
 
-    // Execute a single matching step.
+    // Match each ask in price/time order
     for ask in asks {
         // Create an updatable ask order
         let mut ask = ask;
@@ -1050,8 +1054,46 @@ mod tests {
         )
         .unwrap();
 
-        // Attempt to buy 1 hash at 15 stablecoin/hash price
+        // Attempt to buy 1 hash at 15 stablecoin/hash price yielding fractional nhash proceeds
         let funds = coin(1, "stablecoin");
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("bidder", &[funds]),
+            ExecuteMsg::Bid {
+                id: "test-bid".into(),
+                price: Uint128(15),
+            },
+        )
+        .unwrap_err();
+
+        // Ensure we go the expected error
+        match err {
+            ContractError::InvalidFunds { message } => {
+                assert_eq!(message, "bid price must yield an integral for proceeds")
+            }
+            _ => panic!("unexpected error type"),
+        }
+    }
+
+    #[test]
+    fn invalid_bid_amount_increment() {
+        // Create mock deps.
+        let mut deps = mock_dependencies(&[]);
+
+        // Init
+        instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("admin", &[]),
+            InitMsg {
+                bid_denom: "stablecoin".into(),
+            },
+        )
+        .unwrap();
+
+        // Attempt to buy < 1hash at 15 stablecoin/hash price
+        let funds = coin(3, "stablecoin");
         let err = execute(
             deps.as_mut(),
             mock_env(),
