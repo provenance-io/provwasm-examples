@@ -108,7 +108,7 @@ fn try_bid(
     if proceeds.u128() % state.ask_increment.u128() != 0 {
         deps.api.debug(&format!("proceeds={:?}", proceeds));
         return Err(ContractError::InvalidFunds {
-            message: "funds must yield a bid amount in 1hash increments".into(),
+            message: "funds must yield a bid amount in the required increments".into(),
         });
     }
 
@@ -163,7 +163,7 @@ fn try_ask(
     if funds.amount.is_zero() || funds.amount.u128() % state.ask_increment.u128() != 0 {
         return Err(ContractError::InvalidFunds {
             message: format!(
-                "ask amount must be > 0 in 1hash increments: got {}",
+                "ask amount must be > 0 in the required increments: got {}",
                 funds.amount
             ),
         });
@@ -1108,7 +1108,10 @@ mod tests {
         // Ensure we go the expected error
         match err {
             ContractError::InvalidFunds { message } => {
-                assert_eq!(message, "funds must yield a bid amount in 1hash increments")
+                assert_eq!(
+                    message,
+                    "funds must yield a bid amount in the required increments"
+                )
             }
             _ => panic!("unexpected error type"),
         }
@@ -1147,7 +1150,7 @@ mod tests {
         match err {
             ContractError::InvalidFunds { message } => assert_eq!(
                 message,
-                "ask amount must be > 0 in 1hash increments: got 123456789"
+                "ask amount must be > 0 in the required increments: got 123456789"
             ),
             _ => panic!("unexpected error type"),
         }
